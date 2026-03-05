@@ -6,7 +6,6 @@
   <title>TSP AR Visualizer</title>
   <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;600;700&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script defer src="/_vercel/insights/script.js"></script>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; overflow: hidden; font-family: 'Mulish', Arial, sans-serif; background: #000; }
@@ -23,11 +22,12 @@
     }
     #gestureLayer {
       position: fixed; top: 0; left: 0;
-      width: 100%; height: 100%; z-index: 2;
-      touch-action: none;        /* iOS: evita scroll/zoom del sistema */
+      width: 100%; height: 100%;
+      z-index: 2;                  /* debajo de paneles UI (z-index 9999) */
+      touch-action: none;
       -webkit-user-select: none;
       user-select: none;
-      overscroll-behavior: none; /* evita pull-to-refresh en Android */
+      overscroll-behavior: none;
     }
 
     /* Pantalla de inicio */
@@ -36,7 +36,7 @@
       background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      z-index: 9000; color: white; gap: 20px;
+      z-index: 99999; color: white; gap: 20px;
       text-align: center; padding: 40px;
     }
     #startScreen h1 { font-size: 28px; margin: 0; }
@@ -51,14 +51,15 @@
     }
     #startBtn:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(99,102,241,0.5); }
 
-    /* Panel de Control */
+    /* Panel de Control — por defecto en la parte inferior */
     #controlPanel {
-      position: fixed; top: 20px; left: 50%;
+      position: fixed;
+      bottom: 12px; top: auto; left: 50%;
       transform: translateX(-50%);
       background: rgba(255,255,255,0.15);
       backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
       padding: 20px; border-radius: 20px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3);
+      box-shadow: 0 -8px 40px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3);
       z-index: 9999; display: flex; flex-direction: column; gap: 15px;
       min-width: 340px; max-width: 92vw;
       transition: all 0.3s ease;
@@ -119,23 +120,6 @@
       text-align: center; background: white;
     }
 
-    #info {
-      position: fixed; bottom: 120px; left: 10px;
-      background: rgba(15,23,42,0.9); color: #e2e8f0;
-      padding: 10px 14px; border-radius: 12px;
-      font-family: 'Courier New', monospace; font-size: 12px;
-      z-index: 9999; line-height: 1.8;
-      border: 1px solid rgba(255,255,255,0.1);
-    }
-    #debug {
-      position: fixed; bottom: 10px; left: 10px;
-      background: rgba(15,23,42,0.95); color: #10b981;
-      padding: 8px 12px; border-radius: 12px;
-      font-family: 'Courier New', monospace; font-size: 10px;
-      z-index: 9999; max-width: 300px; max-height: 90px;
-      overflow-y: auto; line-height: 1.4;
-      border: 1px solid rgba(16,185,129,0.3);
-    }
     #expressionBox {
       position: fixed; bottom: 20px; left: 50%;
       transform: translateX(-50%);
@@ -145,11 +129,12 @@
       display: none; z-index: 9999; pointer-events: none;
     }
     #gestureHint {
-      position: fixed; bottom: 130px; left: 50%;
+      position: fixed; bottom: 30px; left: 50%;
       transform: translateX(-50%);
       background: rgba(0,0,0,0.6); color: white;
       padding: 8px 16px; border-radius: 20px; font-size: 12px;
       z-index: 9998; pointer-events: none; transition: opacity 1s;
+      white-space: nowrap;
     }
 
     .panel-minimized { overflow: hidden !important; }
@@ -166,6 +151,55 @@
     }
     #resizeHandle::after { content: '⋮⋮'; line-height: 0.8; opacity: 0.6; }
     #csvInput { display: none; }
+
+    /* ── Mobile: panel compacto ── */
+    @media (max-width: 600px) {
+      #controlPanel {
+        bottom: 8px; top: auto;
+        padding: 10px;
+        gap: 8px;
+        min-width: 0;
+        width: 96vw;
+        max-width: 96vw;
+        border-radius: 14px;
+      }
+      #panelHeader { padding: 7px 8px; border-radius: 10px; }
+      #panelTitle  { font-size: 13px; }
+      .panel-icon-btn { font-size: 13px; padding: 5px 7px; border-radius: 6px; }
+      #zoomLevel { min-width: 32px; font-size: 10px; }
+
+      #buttonRow { gap: 5px; }
+      .control-btn {
+        padding: 7px 11px;
+        font-size: 12px;
+        border-radius: 8px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      }
+
+      #sliderRow { padding: 8px; gap: 8px; border-radius: 10px; }
+      #sliderRow label { font-size: 11px; }
+      #generationSlider::-webkit-slider-thumb { width: 18px; height: 18px; }
+      #generationValue {
+        min-width: 44px; padding: 5px 8px;
+        font-size: 13px; border-radius: 8px;
+      }
+
+      #gestureHint { font-size: 10px; padding: 6px 12px; bottom: 16px; }
+
+      /* Convergencia ocupa casi toda la pantalla en móvil */
+      #convergencePanel {
+        bottom: 0 !important; right: 0 !important;
+        left: 0 !important; top: auto !important;
+        width: 100vw !important;
+        height: 55vh !important;
+        border-radius: 16px 16px 0 0;
+        border-bottom: none;
+        min-width: unset;
+        min-height: unset;
+      }
+      #convResizeHandle { display: none; }
+      #convTitle { font-size: 12px; }
+    }
 
     /* ── Panel de Convergencia ── */
     #convergencePanel {
@@ -276,12 +310,6 @@
 
   <input type="file" id="csvInput" accept=".csv" />
 
-  <div id="info">
-    <div>📊 Puntos: <span id="pointCount">0</span></div>
-    <div>🎯 Generación: <span id="currentGen">0</span></div>
-    <div>📍 CSV: <span id="loadedStatus">No</span></div>
-  </div>
-
   <div id="gestureHint">
     🖱️ Clic+arrastrar: rotar &nbsp;|&nbsp; Clic derecho: mover &nbsp;|&nbsp; Rueda: zoom<br>
     📱 1 dedo: rotar &nbsp;|&nbsp; 2 dedos: mover+zoom
@@ -297,15 +325,17 @@
     <div id="convResizeHandle"></div>
   </div>
 
-  <div id="debug"></div>
   <div id="expressionBox"></div>
 
 <script>
 // ============================================================
+// LOG — solo consola
+// ============================================================
+function log(msg) { console.log(`[TSP-AR] ${msg}`) }
+
+// ============================================================
 // VARIABLES GLOBALES
 // ============================================================
-let debugPanel = null
-
 // CSV / datos
 let csvData = null, parsedData = [], generations = [], colors = []
 let isPlaying = false, currentGeneration = 1, maxGeneration = 0
@@ -346,21 +376,6 @@ let tourRunning   = false
 
 // Gestos
 let touch1 = null, touch2 = null, lastDist = 0
-
-// ============================================================
-// DEBUG LOG
-// ============================================================
-function log(msg) {
-  if (!debugPanel) debugPanel = document.getElementById('debug')
-  if (debugPanel) {
-    const line = document.createElement('div')
-    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`
-    debugPanel.appendChild(line)
-    debugPanel.scrollTop = debugPanel.scrollHeight
-    while (debugPanel.children.length > 20) debugPanel.removeChild(debugPanel.firstChild)
-  }
-  console.log(msg)
-}
 
 // ============================================================
 // CÁMARA — compatible iOS Safari + Android Chrome
@@ -547,19 +562,19 @@ function addPoints(filter) {
       count++
     }
   })
-  document.getElementById('pointCount').textContent = count
+  // pointCount removed
   return count
 }
 
 function showAllPoints() {
   const n = addPoints(() => true)
-  document.getElementById('currentGen').textContent = maxGeneration
+  // currentGen removed
   log(`🎨 ${n} puntos`)
 }
 
 function showPointsUpToGeneration(gen) {
   addPoints(d => d.generation <= gen || d.generation < 0)
-  document.getElementById('currentGen').textContent = gen
+  // currentGen removed
 }
 
 function showBestEvolution() {
@@ -882,7 +897,7 @@ function prepararDatos() {
   enableControls()
   showAllPoints()
 
-  document.getElementById('loadedStatus').textContent = 'Sí ✅'
+  // loadedStatus removed
   log(`✅ ${parsedData.length} puntos cargados (gen 1–${maxGeneration})`)
 }
 
@@ -916,11 +931,20 @@ function rotateCloud(dx, dy) {
   pointsGroup.quaternion.premultiply(_quat)
 }
 
+// Helper: ¿el punto (x,y) está sobre un elemento UI (no la capa 3D)?
+function isOverUI(x, y) {
+  const el = document.elementFromPoint(x, y)
+  if (!el) return false
+  return el.closest('#controlPanel, #convergencePanel, #startScreen, #expressionBox') !== null
+}
+
 function initGestures() {
   const layer = document.getElementById('gestureLayer')
 
   // ── Touch ──
   layer.addEventListener('touchstart', e => {
+    // Si el toque inició sobre un panel UI, no interferir
+    if (isOverUI(e.touches[0].clientX, e.touches[0].clientY)) return
     e.preventDefault()
     touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY }
     touch2 = e.touches.length >= 2
@@ -930,6 +954,7 @@ function initGestures() {
   }, { passive: false })
 
   layer.addEventListener('touchmove', e => {
+    if (!touch1) return   // si touchstart fue sobre UI, touch1 es null → ignorar
     e.preventDefault()
     if (e.touches.length === 1 && touch1) {
       const dx = e.touches[0].clientX - touch1.x
@@ -965,6 +990,7 @@ function initGestures() {
   let mouseDown = false, rightBtn = false, lastMX = 0, lastMY = 0, dragDist = 0
 
   layer.addEventListener('mousedown', e => {
+    if (isOverUI(e.clientX, e.clientY)) return
     mouseDown = true; rightBtn = e.button === 2
     lastMX = e.clientX; lastMY = e.clientY; dragDist = 0
   })
@@ -994,6 +1020,7 @@ function initGestures() {
   // Click en esfera → expresión simbólica
   layer.addEventListener('click', e => {
     if (dragDist > 5) return
+    if (isOverUI(e.clientX, e.clientY)) return
     const mouse = new THREE.Vector2(
       (e.clientX / window.innerWidth)  * 2 - 1,
      -(e.clientY / window.innerHeight) * 2 + 1
@@ -1028,14 +1055,18 @@ function initPanelControls() {
     const r = panel.getBoundingClientRect()
     panelOffsetX = (cx - r.left) / currentZoom
     panelOffsetY = (cy - r.top)  / currentZoom
+    // Convertir de bottom-based a top-based para que el drag funcione
+    panel.style.bottom = 'auto'
+    panel.style.top    = `${r.top}px`
+    panel.style.left   = `${r.left}px`
+    panel.style.transform = `scale(${currentZoom})`
+    panel.style.transformOrigin = 'top left'
     panel.style.transition = 'none'
   }
   const moveDrag = (cx, cy) => {
     if (!isDraggingPanel) return
     panel.style.left = `${cx - panelOffsetX * currentZoom}px`
     panel.style.top  = `${cy - panelOffsetY * currentZoom}px`
-    panel.style.transform = `scale(${currentZoom})`
-    panel.style.transformOrigin = 'top left'
   }
   const endDrag = () => { if (isDraggingPanel) { isDraggingPanel = false; panel.style.transition = 'all 0.3s ease' } }
 
@@ -1064,8 +1095,10 @@ function initPanelControls() {
 
   const updatePanelZoom = delta => {
     currentZoom = Math.max(0.5, Math.min(2.0, currentZoom + delta))
-    panel.style.transform = panel.style.left ? `scale(${currentZoom})` : `translateX(-50%) scale(${currentZoom})`
-    panel.style.transformOrigin = panel.style.left ? 'top left' : 'top center'
+    // Si ya fue movido (tiene top explícito), usar top-left; si no, centrado en bottom
+    const hasMoved = panel.style.top && panel.style.top !== 'auto'
+    panel.style.transform = hasMoved ? `scale(${currentZoom})` : `translateX(-50%) scale(${currentZoom})`
+    panel.style.transformOrigin = hasMoved ? 'top left' : 'bottom center'
     zoomLbl.textContent = `${Math.round(currentZoom * 100)}%`
   }
 
@@ -1074,6 +1107,9 @@ function initPanelControls() {
   document.getElementById('resetZoomBtn').addEventListener('click', () => {
     currentZoom = 1.0
     panel.removeAttribute('style')
+    // Volver al estado inicial: centrado en la parte inferior
+    panel.style.bottom    = '12px'
+    panel.style.top       = 'auto'
     panel.style.transform = 'translateX(-50%)'
     zoomLbl.textContent = '100%'
   })
