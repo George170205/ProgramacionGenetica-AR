@@ -294,7 +294,6 @@
       <button id="convergenceBtn" class="control-btn" disabled>📈 Convergence</button>
       <button id="moveBtn"        class="control-btn">✋ Mover</button>
       <button id="floatBtn"       class="control-btn">✨ Flotar</button>
-      <button id="tourBtn"        class="control-btn" disabled>🛤️ Tour</button>
       <button id="resetViewBtn"   class="control-btn">🎯 Reset View</button>
     </div>
 
@@ -623,8 +622,12 @@ function stopTour() {
   clearInterval(tourInterval)
   tourInterval = null
   clearTourLine()
-  const btn = document.getElementById('tourBtn')
-  if (btn) { btn.textContent = '🛤️ Tour'; btn.classList.remove('active'); btn.style.background = '' }
+  const btn = document.getElementById('evolutionBtn')
+  if (btn) {
+    btn.textContent = '🏆 Best Evolution'
+    btn.classList.remove('active')
+    btn.style.background = ''
+  }
 }
 
 function startTour() {
@@ -934,7 +937,7 @@ function calculateBounds() {
 }
 
 function enableControls() {
-  ['playBtn','showAllBtn','evolutionBtn','convergenceBtn','generationSlider','tourBtn'].forEach(id => {
+  ['playBtn','showAllBtn','evolutionBtn','convergenceBtn','generationSlider'].forEach(id => {
     const el = document.getElementById(id)
     if (el) el.disabled = false
   })
@@ -1167,10 +1170,22 @@ function initControlButtons() {
   })
 
   document.getElementById('showAllBtn').addEventListener('click', () => {
-    stopAnimation(); showAllPoints()
+    stopAnimation(); stopTour(); showAllPoints()
   })
-  document.getElementById('evolutionBtn').addEventListener('click', () => {
-    stopAnimation(); stopTour(); showBestEvolution()
+  // Best Evolution + Tour fusionados en un solo botón toggle
+  const evolutionBtn = document.getElementById('evolutionBtn')
+  evolutionBtn.addEventListener('click', () => {
+    stopAnimation()
+    if (tourRunning) {
+      // Segunda pulsación → detener tour y volver al estado normal
+      stopTour()
+    } else {
+      // Primera pulsación → mostrar puntos IsBest y arrancar tour
+      evolutionBtn.textContent = '⏹ Detener Tour'
+      evolutionBtn.classList.add('active')
+      evolutionBtn.style.background = '#ec4899'
+      startTour()
+    }
   })
   document.getElementById('convergenceBtn').addEventListener('click', () => {
     stopAnimation(); stopTour(); showConvergence()
@@ -1276,20 +1291,6 @@ function initControlButtons() {
       })
     }
     log(floatEnabled ? '✨ Flotación activada' : '⏹ Flotación desactivada')
-  })
-
-  // Tour — línea animada
-  const tourBtn = document.getElementById('tourBtn')
-  tourBtn.addEventListener('click', () => {
-    if (tourRunning) {
-      stopTour()
-    } else {
-      tourBtn.textContent = '⏹ Detener Tour'
-      tourBtn.classList.add('active')
-      tourBtn.style.background = '#ec4899'
-      stopAnimation()
-      startTour()
-    }
   })
 
   const slider = document.getElementById('generationSlider')
