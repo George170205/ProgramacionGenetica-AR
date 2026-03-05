@@ -417,27 +417,40 @@ async function startCamera() {
 }
 
 // ============================================================
+// DETECCIÓN DE MÓVIL — ajustes automáticos de rendimiento
+// ============================================================
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+  || (navigator.maxTouchPoints > 1 && window.innerWidth < 900)
+
+// ============================================================
 // THREE.JS
 // ============================================================
 function initThree() {
   const canvas = document.getElementById('threeCanvas')
   scene    = new THREE.Scene()
-  renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
-  renderer.setPixelRatio(window.devicePixelRatio)
+
+  // Móvil: sin antialias (costoso), desktop: con antialias
+  renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: !isMobile })
+
+  // Móvil: limitar pixelRatio a 1.5 máximo — la diferencia visual es mínima
+  // pero el ahorro de GPU es enorme (un Pixel 6 tiene dpr=2.75 → renderizaría 7.5x más píxeles)
+  renderer.setPixelRatio(isMobile ? Math.min(window.devicePixelRatio, 1.5) : window.devicePixelRatio)
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.setClearColor(0x000000, 0)
 
   camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.01, 200)
   camera.position.set(0, 0, 4)
 
-  // Iluminación múltiple — da volumen real a las esferas
-  scene.add(new THREE.AmbientLight(0xffffff, 0.45))
+  // Iluminación: móvil usa 1 luz (ambient + key), desktop usa 3
+  scene.add(new THREE.AmbientLight(0xffffff, isMobile ? 0.75 : 0.45))
   const key = new THREE.DirectionalLight(0xffffff, 0.9)
   key.position.set(5, 8, 5); scene.add(key)
-  const fill = new THREE.DirectionalLight(0x88aaff, 0.4)
-  fill.position.set(-5, 2, -3); scene.add(fill)
-  const rim = new THREE.DirectionalLight(0xffddaa, 0.3)
-  rim.position.set(0, -5, -5); scene.add(rim)
+  if (!isMobile) {
+    const fill = new THREE.DirectionalLight(0x88aaff, 0.4)
+    fill.position.set(-5, 2, -3); scene.add(fill)
+    const rim = new THREE.DirectionalLight(0xffddaa, 0.3)
+    rim.position.set(0, -5, -5); scene.add(rim)
+  }
 
   pointsGroup = new THREE.Group()
   scene.add(pointsGroup)
@@ -448,22 +461,23 @@ function initThree() {
     renderer.setSize(window.innerWidth, window.innerHeight)
   })
 
+  // Móvil: floatTime avanza más lento para reducir carga del loop
+  const floatDelta = isMobile ? 0.022 : 0.016
+
   ;(function animate() {
     requestAnimationFrame(animate)
 
-    // Posición y escala directas; rotación acumulada via quaternion (sin gimbal lock)
     pointsGroup.position.set(cloudPosX, cloudPosY, 0)
     pointsGroup.scale.setScalar(cloudScale)
 
     // ── Animación flotante ──
     if (floatEnabled && pointMeshes.length > 0) {
-      floatTime += 0.016   // ~60fps delta
-      const AMP = 0.022    // amplitud máxima ~2.2cm en unidades Three.js
-      const FREQ = 0.8     // velocidad de la onda
+      floatTime += floatDelta
+      const AMP  = 0.022
+      const FREQ = isMobile ? 0.5 : 0.8   // más lento en móvil → menos cálculo por frame
       pointMeshes.forEach((mesh, i) => {
         const b = pointBasePosns[i]
         if (!b) return
-        // Cada punto tiene offsets de fase únicos → se mueven de forma independiente
         mesh.position.x = b.x + Math.sin(floatTime * FREQ + b.ox) * AMP
         mesh.position.y = b.y + Math.sin(floatTime * FREQ + b.oy) * AMP * 0.8
         mesh.position.z = b.z + Math.sin(floatTime * FREQ + b.oz) * AMP * 0.6
@@ -473,7 +487,7 @@ function initThree() {
     renderer.render(scene, camera)
   })()
 
-  log('✅ Three.js listo')
+  log(`✅ Three.js listo (${isMobile ? '📱 móvil optimizado' : '🖥️ desktop'})`)
 }
 
 // ============================================================
@@ -509,8 +523,12 @@ function normalize(v, mn, mx) { return mx === mn ? 0.5 : (v - mn) / (mx - mn) }
 
 // ============================================================
 // GEOMETRÍA DE PUNTOS
+// Móvil: esferas de 6 segmentos + MeshLambertMaterial (sin PBR)
+// Desktop: 14 segmentos + MeshStandardMaterial (PBR completo)
 // ============================================================
-const _sphereGeo = new THREE.SphereGeometry(0.05, 14, 14)
+const _sphereGeo = isMobile
+  ? new THREE.SphereGeometry(0.05, 6, 6)    // ~48 triángulos vs ~392 → 8x menos
+  : new THREE.SphereGeometry(0.05, 14, 14)
 
 function createSphere(data, color) {
   const SCALE = 2.5
@@ -518,20 +536,24 @@ function createSphere(data, color) {
   const y = (normalize(data.y, minY, maxY) - 0.5) * SCALE
   const z = (normalize(data.z, minZ, maxZ) - 0.5) * SCALE
 
-  const mesh = new THREE.Mesh(
-    _sphereGeo,
-    new THREE.MeshStandardMaterial({
-      color:       cssToHex(color),
-      roughness:   0.35,
-      metalness:   0.1,
-      opacity:     0.9,
-      transparent: true,
-    })
-  )
+  const mat = isMobile
+    ? new THREE.MeshLambertMaterial({         // más rápido: sin specular ni PBR
+        color:       cssToHex(color),
+        opacity:     0.9,
+        transparent: true,
+      })
+    : new THREE.MeshStandardMaterial({        // PBR completo para desktop
+        color:       cssToHex(color),
+        roughness:   0.35,
+        metalness:   0.1,
+        opacity:     0.9,
+        transparent: true,
+      })
+
+  const mesh = new THREE.Mesh(_sphereGeo, mat)
   mesh.position.set(x, y, z)
   mesh.userData = data
 
-  // Guardar posición base + offsets de fase aleatorios únicos para la animación flotante
   pointBasePosns.push({
     x, y, z,
     ox: Math.random() * Math.PI * 2,
