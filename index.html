@@ -431,6 +431,29 @@ let xrSession    = null
 let xrRefSpace   = null
 let xrSupported  = false
 
+// Panel 3D en XR
+let xrPanel      = null   // THREE.Mesh plano con la UI
+let xrPanelCtx   = null   // canvas 2D que dibuja el panel
+let xrPanelTex   = null   // THREE.CanvasTexture
+let xrRaycaster  = new THREE.Raycaster()
+let xrControllers = []    // referencias a los controllers del Quest
+
+// Definición de botones del panel XR (posición normalizada 0-1 en el canvas)
+const XR_PANEL_W = 800, XR_PANEL_H = 520
+const XR_BTNS = [
+  { id:'csvBtn',        label:'📂 CSV',         x:0.05, y:0.08, w:0.42, h:0.10, color:'#3b82f6' },
+  { id:'playBtn',       label:'▶ Play',          x:0.53, y:0.08, w:0.42, h:0.10, color:'#10b981', disabled:true },
+  { id:'showAllBtn',    label:'👁 Show All',     x:0.05, y:0.22, w:0.42, h:0.10, color:'#6366f1', disabled:true },
+  { id:'evolutionBtn',  label:'🏆 Best Evol.',   x:0.53, y:0.22, w:0.42, h:0.10, color:'#f59e0b', disabled:true },
+  { id:'convergenceBtn',label:'📈 Convergence',  x:0.05, y:0.36, w:0.42, h:0.10, color:'#3b82f6', disabled:true },
+  { id:'moveBtn',       label:'✋ Mover',         x:0.53, y:0.36, w:0.42, h:0.10, color:'#64748b' },
+  { id:'floatBtn',      label:'✨ Flotar',        x:0.05, y:0.50, w:0.42, h:0.10, color:'#64748b' },
+  { id:'resetViewBtn',  label:'🎯 Reset',         x:0.53, y:0.50, w:0.42, h:0.10, color:'#64748b' },
+  // Slider generación — solo display, no interactivo por ahora
+  { id:'__gen',         label:'',                x:0.05, y:0.65, w:0.90, h:0.08, color:'#1e3a5f', isSlider:true },
+  { id:'__close',       label:'✕ Salir AR',      x:0.25, y:0.82, w:0.50, h:0.12, color:'#dc2626' },
+]
+
 // ============================================================
 // THREE.JS
 // ============================================================
@@ -498,6 +521,9 @@ function initThree(xrMode = false) {
       })
     }
 
+    // Refrescar panel XR (solo cuando está en sesión activa)
+    if (xrPanel && xrSession) drawXRPanel()
+
     renderer.render(scene, camera)
   })
 
@@ -507,6 +533,166 @@ function initThree(xrMode = false) {
 // ============================================================
 // WEBXR — passthrough AR para Meta Quest
 // ============================================================
+
+// ── Dibuja el panel en el canvas 2D ──
+function drawXRPanel() {
+  if (!xrPanelCtx) return
+  const ctx = xrPanelCtx
+  const W = XR_PANEL_W, H = XR_PANEL_H
+
+  // Fondo
+  ctx.clearRect(0, 0, W, H)
+  const bg = ctx.createRoundRect ? null : null
+  ctx.fillStyle = 'rgba(10,15,40,0.92)'
+  roundRect(ctx, 0, 0, W, H, 24)
+  ctx.fill()
+
+  // Borde
+  ctx.strokeStyle = 'rgba(99,102,241,0.6)'
+  ctx.lineWidth = 3
+  roundRect(ctx, 0, 0, W, H, 24)
+  ctx.stroke()
+
+  // Título
+  ctx.fillStyle = '#c7d2fe'
+  ctx.font = 'bold 26px Arial'
+  ctx.textAlign = 'center'
+  ctx.fillText('🧬 TSP AR Visualizer', W / 2, 44)
+
+  // Info generación
+  ctx.font = '18px Arial'
+  ctx.fillStyle = '#94a3b8'
+  ctx.fillText(`Gen: ${currentGeneration} / ${maxGeneration || '—'}   Puntos: ${pointMeshes.length}`, W / 2, 68)
+
+  // Botones
+  XR_BTNS.forEach(btn => {
+    const x = btn.x * W, y = btn.y * H
+    const w = btn.w * W, h = btn.h * H
+
+    if (btn.isSlider) {
+      // Barra de generación
+      ctx.fillStyle = '#1e3a5f'
+      roundRect(ctx, x, y, w, h, 8); ctx.fill()
+      if (maxGeneration > 0) {
+        const prog = (currentGeneration - 1) / (maxGeneration - 1 || 1)
+        ctx.fillStyle = '#3b82f6'
+        roundRect(ctx, x, y, w * prog, h, 8); ctx.fill()
+      }
+      ctx.fillStyle = '#fff'
+      ctx.font = '16px Arial'
+      ctx.textAlign = 'center'
+      ctx.fillText(`Generación: ${currentGeneration}`, x + w / 2, y + h / 2 + 6)
+      return
+    }
+
+    const isDisabled = btn.disabled && parsedData.length === 0
+    const isActive   = (btn.id === 'moveBtn' && moveMode) ||
+                       (btn.id === 'floatBtn' && floatEnabled) ||
+                       (btn.id === 'evolutionBtn' && tourRunning)
+
+    ctx.fillStyle = isDisabled ? '#374151' : isActive ? '#ec4899' : btn.color
+    ctx.globalAlpha = isDisabled ? 0.45 : 1.0
+    roundRect(ctx, x, y, w, h, 12); ctx.fill()
+    ctx.globalAlpha = 1.0
+
+    // Texto botón
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `bold 20px Arial`
+    ctx.textAlign = 'center'
+    ctx.fillText(btn.label, x + w / 2, y + h / 2 + 7)
+  })
+
+  if (xrPanelTex) xrPanelTex.needsUpdate = true
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.lineTo(x + w - r, y)
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+  ctx.lineTo(x + w, y + h - r)
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+  ctx.lineTo(x + r, y + h)
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+  ctx.lineTo(x, y + r)
+  ctx.quadraticCurveTo(x, y, x + r, y)
+  ctx.closePath()
+}
+
+// ── Crea el plano 3D del panel ──
+function createXRPanel() {
+  const canvas = document.createElement('canvas')
+  canvas.width  = XR_PANEL_W
+  canvas.height = XR_PANEL_H
+  xrPanelCtx = canvas.getContext('2d')
+
+  xrPanelTex = new THREE.CanvasTexture(canvas)
+  const geo  = new THREE.PlaneGeometry(0.8, 0.52)  // 80cm × 52cm en el mundo
+  const mat  = new THREE.MeshBasicMaterial({ map: xrPanelTex, transparent: true, side: THREE.DoubleSide })
+  xrPanel    = new THREE.Mesh(geo, mat)
+
+  // Posición: a la derecha del usuario, a altura de ojos, 1m de distancia
+  xrPanel.position.set(0.55, 0.0, -1.0)
+  xrPanel.rotation.y = -0.3   // girado levemente hacia el centro
+  scene.add(xrPanel)
+  drawXRPanel()
+}
+
+// ── Detecta qué botón fue apuntado por el controller ──
+function handleXRSelect(controller) {
+  if (!xrPanel) return
+  xrRaycaster.setFromXRController(controller)
+  const hits = xrRaycaster.intersectObject(xrPanel)
+  if (!hits.length) return
+
+  const uv = hits[0].uv  // 0-1
+  const px = uv.x * XR_PANEL_W
+  const py = (1 - uv.y) * XR_PANEL_H
+
+  for (const btn of XR_BTNS) {
+    const x = btn.x * XR_PANEL_W, y = btn.y * XR_PANEL_H
+    const w = btn.w * XR_PANEL_W, h = btn.h * XR_PANEL_H
+    if (px >= x && px <= x + w && py >= y && py <= y + h) {
+      handleXRBtnClick(btn.id)
+      break
+    }
+  }
+}
+
+function handleXRBtnClick(id) {
+  if (id === '__close') {
+    if (xrSession) xrSession.end()
+    return
+  }
+  if (id === '__gen') return  // slider — no interactivo por toque simple
+  // Simular click en el botón DOM equivalente
+  const domBtn = document.getElementById(id)
+  if (domBtn && !domBtn.disabled) {
+    domBtn.click()
+    drawXRPanel()   // refrescar panel tras acción
+  }
+}
+
+// ── Registra los controllers del Quest ──
+function setupXRControllers() {
+  for (let i = 0; i < 2; i++) {
+    const ctrl = renderer.xr.getController(i)
+
+    // Línea de puntero (ray)
+    const rayGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, 0, -1)
+    ])
+    const ray = new THREE.Line(rayGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }))
+    ray.scale.z = 2
+    ctrl.add(ray)
+
+    ctrl.addEventListener('select', () => handleXRSelect(ctrl))
+    scene.add(ctrl)
+    xrControllers.push(ctrl)
+  }
+}
+
 async function checkXRSupport() {
   if (!navigator.xr) {
     document.getElementById('xrStatus').textContent = 'WebXR no disponible en este browser'
@@ -527,39 +713,44 @@ async function checkXRSupport() {
 async function startXRSession() {
   if (!xrSupported) return
   try {
-    // Quest requiere 'local' o 'local-floor' como feature obligatoria
-    // NO pasar environmentBlendMode — es propiedad de sesión, no de request
     xrSession = await navigator.xr.requestSession('immersive-ar', {
       requiredFeatures: ['local'],
       optionalFeatures: ['local-floor', 'hand-tracking']
     })
 
-    // Configurar referencia ANTES de setSession
     renderer.xr.setReferenceSpaceType('local')
-
-    // setSession hace que Three.js tome control del loop de render para XR
     await renderer.xr.setSession(xrSession)
 
-    // Ocultar video — el passthrough lo maneja el compositor del Quest
     document.getElementById('cameraVideo').style.display = 'none'
 
-    // Posicionar la nube a 1.5m frente al usuario, a altura de ojos (~1.6m)
-    pointsGroup.position.set(0, 0, -1.5)
+    // Nube a 1.5m frente al usuario
+    pointsGroup.position.set(-0.3, 0, -1.5)
     pointsGroup.scale.setScalar(0.35)
+
+    // Crear panel 3D y controllers
+    createXRPanel()
+    setupXRControllers()
+
+    // Refrescar panel cada vez que cambia el estado
+    const _origShowAll  = showAllPoints
+    const _origStop     = stopAnimation
 
     xrSession.addEventListener('end', () => {
       xrSession = null
-      log('🥽 Sesión AR terminada')
+      // Limpiar panel y controllers de la escena
+      if (xrPanel) { scene.remove(xrPanel); xrPanel = null }
+      xrControllers.forEach(c => scene.remove(c))
+      xrControllers.length = 0
       // Restaurar estado normal
       pointsGroup.position.set(0, 0, 0)
       pointsGroup.scale.setScalar(1.0)
       document.getElementById('cameraVideo').style.display = 'block'
+      log('🥽 Sesión AR terminada')
     })
 
-    log('🥽 Sesión AR iniciada')
+    log('🥽 Sesión AR iniciada — panel 3D activo')
   } catch (e) {
     log(`❌ XR error: ${e.message}`)
-    // Mostrar error visible en pantalla
     const s = document.createElement('div')
     s.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:#f87171;padding:20px 30px;border-radius:12px;font-size:16px;z-index:99999;text-align:center'
     s.innerHTML = `❌ Error AR:<br><small>${e.message}</small><br><br><button onclick="this.parentNode.remove()" style="padding:8px 16px;background:#3b82f6;color:white;border:none;border-radius:8px;cursor:pointer">Cerrar</button>`
