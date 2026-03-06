@@ -675,11 +675,11 @@ function handleXRSelect(ctrl) {
   const { origin, direction } = getControllerRay(ctrl)
   xrRaycaster.set(origin, direction)
 
-  // Primero intentar hit en el panel UI
+  // Verificar hit en panel UI — pero solo actuar si cayó en un botón real
   if (xrPanel) {
-    const hits = xrRaycaster.intersectObject(xrPanel)
-    if (hits.length) {
-      const uv = hits[0].uv
+    const panelHits = xrRaycaster.intersectObject(xrPanel)
+    if (panelHits.length) {
+      const uv = panelHits[0].uv
       const px = uv.x * XR_PANEL_W
       const py = (1 - uv.y) * XR_PANEL_H
       for (const btn of XR_BTNS) {
@@ -687,14 +687,15 @@ function handleXRSelect(ctrl) {
         const w = btn.w * XR_PANEL_W, h = btn.h * XR_PANEL_H
         if (px >= x && px <= x + w && py >= y && py <= y + h) {
           handleXRBtnClick(btn.id)
-          return
+          return   // solo salir si cayó en un botón real
         }
       }
-      return  // hit panel pero no en botón
+      // Cayó en el panel pero NO en ningún botón → ignorar panel,
+      // continuar hacia las esferas detrás
     }
   }
 
-  // Si no hit panel → raycast a esferas para expresión simbólica
+  // Raycast a esferas (ignorando el panel en el intersect)
   if (pointMeshes.length > 0) {
     const hits = xrRaycaster.intersectObjects(pointMeshes)
     if (hits.length > 0 && hits[0].object.userData.expression) {
@@ -1026,18 +1027,40 @@ function updateXRControllers() {
   if (!xrSession) return
 
   xrControllers.forEach(({ ctrl, dot, rayMat, state }, idx) => {
-    // Actualizar puntito de impacto en panel
+    const { origin, direction } = getControllerRay(ctrl)
+    xrRaycaster.set(origin, direction)
+
+    // Comprobar si apunta a un botón real del panel (no solo la superficie)
+    let onButton = false
     if (xrPanel) {
-      const { origin, direction } = getControllerRay(ctrl)
-      xrRaycaster.set(origin, direction)
-      const hits = xrRaycaster.intersectObject(xrPanel)
-      if (hits.length) {
-        dot.position.copy(hits[0].point)
-        dot.visible    = true
-        rayMat.color.setHex(0xffd700)  // dorado cuando apunta al panel
+      const panelHits = xrRaycaster.intersectObject(xrPanel)
+      if (panelHits.length) {
+        const uv = panelHits[0].uv
+        const px = uv.x * XR_PANEL_W
+        const py = (1 - uv.y) * XR_PANEL_H
+        onButton = XR_BTNS.some(btn => {
+          const x = btn.x * XR_PANEL_W, y = btn.y * XR_PANEL_H
+          const w = btn.w * XR_PANEL_W, h = btn.h * XR_PANEL_H
+          return px >= x && px <= x+w && py >= y && py <= y+h
+        })
+        if (onButton) {
+          dot.position.copy(panelHits[0].point)
+          dot.visible = true
+          rayMat.color.setHex(0xffd700)  // dorado solo sobre botón real
+        }
+      }
+    }
+
+    // Si no apunta a botón → comprobar esferas para feedback visual
+    if (!onButton) {
+      const sphereHits = xrRaycaster.intersectObjects(pointMeshes)
+      if (sphereHits.length) {
+        dot.position.copy(sphereHits[0].point)
+        dot.visible = true
+        rayMat.color.setHex(0x00ff88)  // verde sobre esfera
       } else {
-        dot.visible    = state.active ? true : false
-        rayMat.color.setHex(0xffffff)
+        dot.visible = state.active
+        rayMat.color.setHex(0xffffff)  // blanco por defecto
       }
     }
 
