@@ -186,14 +186,15 @@
 
       #gestureHint { font-size: 10px; padding: 6px 12px; bottom: 16px; }
 
-      /* Convergencia ocupa casi toda la pantalla en móvil */
+      /* Convergencia en móvil: ocupa la mitad superior, deja espacio al panel de control */
       #convergencePanel {
-        bottom: 0 !important; right: 0 !important;
-        left: 0 !important; top: auto !important;
-        width: 100vw !important;
-        height: 55vh !important;
-        border-radius: 16px 16px 0 0;
-        border-bottom: none;
+        bottom: auto !important;
+        top: 8px !important;
+        left: 2vw !important;
+        right: 2vw !important;
+        width: 96vw !important;
+        height: 52vh !important;
+        border-radius: 16px !important;
         min-width: unset;
         min-height: unset;
       }
@@ -212,7 +213,7 @@
       border: 1px solid rgba(99, 102, 241, 0.4);
       border-radius: 16px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
-      z-index: 9998;
+      z-index: 10001;  /* por encima de todo, incluyendo controlPanel */
       display: none;
       flex-direction: column;
       overflow: hidden;
@@ -1175,7 +1176,6 @@ function startTour() {
 function showConvergence() {
   if (!parsedData.length) { log('❌ Carga un CSV primero'); return }
 
-  // Filtrar solo IsBest=1 con Train válido, ordenar por generación
   const pts = parsedData
     .filter(d => d.isBest && d.train !== null && !isNaN(d.train) && d.generation > 0)
     .sort((a, b) => a.generation - b.generation)
@@ -1187,8 +1187,14 @@ function showConvergence() {
 
   const panel = document.getElementById('convergencePanel')
   panel.classList.add('visible')
-  drawConvergenceChart(pts)
-  log(`📈 Convergencia: ${pts.length} puntos graficados`)
+
+  // Esperar a que el browser calcule las dimensiones del panel antes de dibujar
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      drawConvergenceChart(pts)
+      log(`📈 Convergencia: ${pts.length} puntos graficados`)
+    })
+  })
 }
 
 function drawConvergenceChart(pts) {
