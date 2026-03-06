@@ -262,6 +262,10 @@
     <h1>TSP AR Visualizer</h1>
     <p>Visualiza nubes de puntos 3D sobre la cámara en tiempo real.<br>Carga un CSV y explora los datos en AR.</p>
     <button id="startBtn">📷 Activar Cámara</button>
+    <button id="startXRBtn" style="display:none;padding:16px 40px;background:linear-gradient(135deg,#8b5cf6,#ec4899);color:white;border:none;border-radius:14px;font-size:18px;font-weight:700;cursor:pointer;box-shadow:0 8px 24px rgba(139,92,246,0.4)">
+      🥽 Entrar en AR (Quest)
+    </button>
+    <p id="xrStatus" style="font-size:12px;color:#64748b;margin:0"></p>
   </div>
 
   <!-- Video de cámara (fondo) -->
@@ -420,6 +424,12 @@ async function startCamera() {
 // ============================================================
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
   || (navigator.maxTouchPoints > 1 && window.innerWidth < 900)
+const isQuest  = /OculusBrowser|Quest/i.test(navigator.userAgent)
+
+// WebXR state
+let xrSession    = null
+let xrRefSpace   = null
+let xrSupported  = false
 
 // ============================================================
 // THREE.JS
@@ -428,19 +438,15 @@ function initThree() {
   const canvas = document.getElementById('threeCanvas')
   scene    = new THREE.Scene()
 
-  // Móvil: sin antialias (costoso), desktop: con antialias
   renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: !isMobile })
-
-  // Móvil: limitar pixelRatio a 1.5 máximo — la diferencia visual es mínima
-  // pero el ahorro de GPU es enorme (un Pixel 6 tiene dpr=2.75 → renderizaría 7.5x más píxeles)
   renderer.setPixelRatio(isMobile ? Math.min(window.devicePixelRatio, 1.5) : window.devicePixelRatio)
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.setClearColor(0x000000, 0)
+  renderer.xr.enabled = true   // habilitar WebXR en Three.js
 
   camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.01, 200)
   camera.position.set(0, 0, 4)
 
-  // Iluminación: móvil usa 1 luz (ambient + key), desktop usa 3
   scene.add(new THREE.AmbientLight(0xffffff, isMobile ? 0.75 : 0.45))
   const key = new THREE.DirectionalLight(0xffffff, 0.9)
   key.position.set(5, 8, 5); scene.add(key)
@@ -452,6 +458,8 @@ function initThree() {
   }
 
   pointsGroup = new THREE.Group()
+  // En WebXR la nube va frente a la cámara a ~1.5m
+  pointsGroup.position.set(0, 0, -1.5)
   scene.add(pointsGroup)
 
   window.addEventListener('resize', () => {
@@ -460,20 +468,21 @@ function initThree() {
     renderer.setSize(window.innerWidth, window.innerHeight)
   })
 
-  // Móvil: floatTime avanza más lento para reducir carga del loop
   const floatDelta = isMobile ? 0.022 : 0.016
 
-  ;(function animate() {
-    requestAnimationFrame(animate)
+  // setAnimationLoop es compatible tanto con rAF normal como con WebXR
+  renderer.setAnimationLoop(() => {
+    // Sin XR: posición y escala controladas por gestos normales
+    if (!xrSession) {
+      pointsGroup.position.set(cloudPosX, cloudPosY, 0)
+      pointsGroup.scale.setScalar(cloudScale)
+    }
+    // Con XR: la posición la maneja startXRSession, el usuario mueve con los controllers
 
-    pointsGroup.position.set(cloudPosX, cloudPosY, 0)
-    pointsGroup.scale.setScalar(cloudScale)
-
-    // ── Animación flotante ──
     if (floatEnabled && pointMeshes.length > 0) {
       floatTime += floatDelta
       const AMP  = 0.022
-      const FREQ = isMobile ? 0.5 : 0.8   // más lento en móvil → menos cálculo por frame
+      const FREQ = isMobile ? 0.5 : 0.8
       pointMeshes.forEach((mesh, i) => {
         const b = pointBasePosns[i]
         if (!b) return
@@ -484,9 +493,66 @@ function initThree() {
     }
 
     renderer.render(scene, camera)
-  })()
+  })
 
-  log(`✅ Three.js listo (${isMobile ? '📱 móvil optimizado' : '🖥️ desktop'})`)
+  log(`✅ Three.js listo (${isQuest ? '🥽 Quest' : isMobile ? '📱 móvil' : '🖥️ desktop'})`)
+}
+
+// ============================================================
+// WEBXR — passthrough AR para Meta Quest
+// ============================================================
+async function checkXRSupport() {
+  if (!navigator.xr) {
+    document.getElementById('xrStatus').textContent = 'WebXR no disponible en este browser'
+    return
+  }
+  try {
+    xrSupported = await navigator.xr.isSessionSupported('immersive-ar')
+    if (xrSupported) {
+      document.getElementById('startXRBtn').style.display = 'block'
+      document.getElementById('startBtn').textContent = '📷 Cámara normal'
+      document.getElementById('xrStatus').textContent = '🥽 Quest detectado — AR disponible'
+    }
+  } catch (e) {
+    log(`XR check: ${e.message}`)
+  }
+}
+
+async function startXRSession() {
+  if (!xrSupported) return
+  try {
+    // Solicitar sesión AR con passthrough
+    xrSession = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures:  ['local-floor'],
+      optionalFeatures:  ['hand-tracking', 'bounded-floor', 'layers'],
+      environmentBlendMode: 'alpha-blend'  // passthrough real
+    })
+
+    renderer.xr.setReferenceSpaceType('local-floor')
+    await renderer.xr.setSession(xrSession)
+
+    // En AR el canvas ocupa toda la pantalla inmersiva
+    document.getElementById('threeCanvas').style.position = 'fixed'
+    document.getElementById('threeCanvas').style.zIndex   = '1'
+    document.getElementById('cameraVideo').style.display  = 'none'
+
+    // La nube flotante a 1.5m frente al usuario
+    pointsGroup.position.set(0, 1.2, -1.5)
+    pointsGroup.scale.setScalar(0.4)
+
+    xrSession.addEventListener('end', () => {
+      xrSession = null
+      log('🥽 Sesión AR terminada')
+      pointsGroup.position.set(0, 0, 0)
+      pointsGroup.scale.setScalar(1.0)
+      document.getElementById('cameraVideo').style.display = 'block'
+    })
+
+    log('🥽 Sesión AR iniciada — passthrough activo')
+  } catch (e) {
+    log(`❌ Error XR: ${e.message}`)
+    xrSession = null
+  }
 }
 
 // ============================================================
@@ -1305,6 +1371,10 @@ function initControlButtons() {
 // ============================================================
 // ARRANQUE
 // ============================================================
+
+// Verificar soporte WebXR al cargar la página
+window.addEventListener('load', checkXRSupport)
+
 document.getElementById('startBtn').addEventListener('click', async () => {
   document.getElementById('startScreen').style.display = 'none'
   await startCamera()
@@ -1313,13 +1383,26 @@ document.getElementById('startBtn').addEventListener('click', async () => {
   initPanelControls()
   initControlButtons()
 
-  // Ocultar hint de gestos tras 6 segundos
   setTimeout(() => {
     const h = document.getElementById('gestureHint')
     if (h) { h.style.opacity = '0'; setTimeout(() => h.remove(), 1000) }
   }, 6000)
 
   log('🚀 Sistema AR iniciado — carga un CSV para comenzar')
+})
+
+// Botón Quest: iniciar Three.js primero, luego solicitar sesión XR
+document.getElementById('startXRBtn').addEventListener('click', async () => {
+  document.getElementById('startScreen').style.display = 'none'
+  // No iniciamos la cámara normal — WebXR maneja el passthrough
+  document.getElementById('cameraVideo').style.display = 'none'
+  document.body.style.background = '#000'
+  initThree()
+  initGestures()
+  initPanelControls()
+  initControlButtons()
+  await startXRSession()
+  log('🥽 Quest AR listo — carga un CSV para comenzar')
 })
 </script>
 </body>
