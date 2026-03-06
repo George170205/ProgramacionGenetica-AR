@@ -299,6 +299,7 @@
       <button id="moveBtn"        class="control-btn">✋ Mover</button>
       <button id="floatBtn"       class="control-btn">✨ Flotar</button>
       <button id="resetViewBtn"   class="control-btn">🎯 Reset View</button>
+      <button id="enterARBtn"     class="control-btn" style="display:none;background:linear-gradient(135deg,#8b5cf6,#ec4899)">🥽 Entrar AR</button>
     </div>
 
 
@@ -778,9 +779,10 @@ async function checkXRSupport() {
   try {
     xrSupported = await navigator.xr.isSessionSupported('immersive-ar')
     if (xrSupported) {
-      document.getElementById('startXRBtn').style.display = 'block'
-      document.getElementById('startBtn').textContent = '📷 Cámara normal'
-      document.getElementById('xrStatus').textContent = '🥽 Quest detectado — AR disponible'
+      document.getElementById('startXRBtn').style.display  = 'block'
+      document.getElementById('enterARBtn').style.display  = 'block'
+      document.getElementById('startBtn').textContent      = '📷 Cámara normal'
+      document.getElementById('xrStatus').textContent      = '🥽 Quest detectado — AR disponible'
     }
   } catch (e) {
     log(`XR check: ${e.message}`)
@@ -814,14 +816,17 @@ async function startXRSession() {
 
     xrSession.addEventListener('end', () => {
       xrSession = null
-      if (xrPanel) { scene.remove(xrPanel); xrPanel = null }
+      if (xrPanel)    { scene.remove(xrPanel);    xrPanel = null }
       if (xrCsvPanel) { scene.remove(xrCsvPanel); xrCsvPanel = null }
       xrControllers.forEach(c => scene.remove(c))
       xrControllers.length = 0
       pointsGroup.position.set(0, 0, 0)
       pointsGroup.scale.setScalar(1.0)
       document.getElementById('cameraVideo').style.display = 'block'
-      log('🥽 Sesión AR terminada')
+      // Mostrar botón para poder volver a entrar sin recargar
+      const btn = document.getElementById('enterARBtn')
+      if (btn) { btn.style.display = 'block'; btn.textContent = '🥽 Entrar AR'; btn.disabled = false }
+      log('🥽 Sesión AR terminada — puedes volver a entrar con el botón del panel')
     })
 
     log('🥽 Sesión AR iniciada — panel 3D activo')
@@ -1646,6 +1651,19 @@ function initControlButtons() {
     valBox.value = currentGeneration
     showPointsUpToGeneration(currentGeneration)
   })
+
+  // Botón "Entrar AR" dentro del panel — re-entra sin recargar
+  const enterARBtn = document.getElementById('enterARBtn')
+  if (enterARBtn) {
+    enterARBtn.addEventListener('click', async () => {
+      if (!xrSupported) return
+      enterARBtn.textContent  = '⏳ Iniciando...'
+      enterARBtn.disabled     = true
+      await startXRSession()
+      enterARBtn.textContent  = '🥽 Entrar AR'
+      enterARBtn.disabled     = false
+    })
+  }
 }
 
 // ============================================================
