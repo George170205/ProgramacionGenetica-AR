@@ -965,6 +965,10 @@ function isAimingAtPanel(ctrl) {
 // Estado del botón A (evitar repetición por frame)
 let btnA_wasPressed = false
 
+// Estado de agarre con botón X
+const xrGrab = { active: false, target: null, prevPos: new THREE.Vector3() }
+let xrScale = 0.35   // escala base de la nube en modo XR
+
 function setupXRControllers() {
   for (let i = 0; i < 2; i++) {
     const ctrl  = renderer.xr.getController(i)
@@ -1089,28 +1093,95 @@ function updateXRControllers() {
     if (xrControllers[0]) xrControllers[0]._lastDist = null
   }
 
-  // ── Botón A (controller derecho, index 1) → mostrar expresión de esfera apuntada ──
-  // buttons[4] = A en Quest Touch controller
+  // ── Leer gamepads de ambos controllers ──
   const session = renderer.xr.getSession()
-  if (session) {
-    const sources = Array.from(session.inputSources)
-    const rightSource = sources.find(s => s.handedness === 'right')
-    if (rightSource?.gamepad?.buttons?.[4]) {
-      const btnA = rightSource.gamepad.buttons[4].pressed
-      if (btnA && !btnA_wasPressed) {
-        // Botón A recién presionado — raycast desde controller derecho
-        const rightCtrl = xrControllers.find((_, i) => i === 1)?.ctrl
-                       || xrControllers[1]?.ctrl
-        if (rightCtrl && pointMeshes.length > 0) {
-          const { origin, direction } = getControllerRay(rightCtrl)
-          xrRaycaster.set(origin, direction)
-          const hits = xrRaycaster.intersectObjects(pointMeshes)
-          if (hits.length > 0 && hits[0].object.userData.expression) {
-            showExpressionXR(hits[0].object.userData.expression, hits[0].point)
-          }
+  if (!session) return
+  const sources     = Array.from(session.inputSources)
+  const rightSource = sources.find(s => s.handedness === 'right')
+  const leftSource  = sources.find(s => s.handedness === 'left')
+  const rightCtrl   = xrControllers[1]?.ctrl
+  const leftCtrl    = xrControllers[0]?.ctrl
+
+  // ── Botón A (derecho, buttons[4]) → expresión de esfera apuntada ──
+  if (rightSource?.gamepad?.buttons?.[4]) {
+    const btnA = rightSource.gamepad.buttons[4].pressed
+    if (btnA && !btnA_wasPressed && rightCtrl && pointMeshes.length > 0) {
+      const { origin, direction } = getControllerRay(rightCtrl)
+      xrRaycaster.set(origin, direction)
+      const hits = xrRaycaster.intersectObjects(pointMeshes)
+      if (hits.length > 0 && hits[0].object.userData.expression)
+        showExpressionXR(hits[0].object.userData.expression, hits[0].point)
+    }
+    btnA_wasPressed = btnA
+  }
+
+  // ── Botón X (izquierdo, buttons[4]) → agarrar y desplazar lo que apunta ──
+  if (leftSource?.gamepad?.buttons?.[4]) {
+    const btnX = leftSource.gamepad.buttons[4].pressed
+    if (btnX) {
+      // ¿Qué está apuntando el controller izquierdo?
+      if (!xrGrab.active) {
+        // Primer frame de X presionado — detectar qué agarrar
+        xrGrab.active  = true
+        xrGrab.prevPos = new THREE.Vector3().setFromMatrixPosition(leftCtrl.matrixWorld)
+
+        // Raycast para saber el objetivo
+        const { origin, direction } = getControllerRay(leftCtrl)
+        xrRaycaster.set(origin, direction)
+
+        if (xrPanel && xrRaycaster.intersectObject(xrPanel).length)
+          xrGrab.target = 'panel'
+        else if (xrConvPanel && xrRaycaster.intersectObject(xrConvPanel).length)
+          xrGrab.target = 'conv'
+        else
+          xrGrab.target = 'cloud'  // por defecto desplaza la nube
+      } else {
+        // Frames siguientes — aplicar desplazamiento
+        const curPos = new THREE.Vector3().setFromMatrixPosition(leftCtrl.matrixWorld)
+        const delta  = curPos.clone().sub(xrGrab.prevPos)
+        const SPEED  = 1.5
+
+        if (xrGrab.target === 'panel' && xrPanel) {
+          xrPanel.position.x += delta.x * SPEED
+          xrPanel.position.y += delta.y * SPEED
+          xrPanel.position.z += delta.z * SPEED
+        } else if (xrGrab.target === 'conv' && xrConvPanel) {
+          xrConvPanel.position.x += delta.x * SPEED
+          xrConvPanel.position.y += delta.y * SPEED
+          xrConvPanel.position.z += delta.z * SPEED
+        } else {
+          // Mover nube
+          pointsGroup.position.x += delta.x * SPEED
+          pointsGroup.position.y += delta.y * SPEED
+          pointsGroup.position.z += delta.z * SPEED
         }
+        xrGrab.prevPos.copy(curPos)
       }
-      btnA_wasPressed = btnA
+    } else {
+      // X soltado
+      xrGrab.active = false
+      xrGrab.target = null
+    }
+  }
+
+  // ── Joystick derecho (axes[2]/[3]) → zoom de la nube ──
+  if (rightSource?.gamepad?.axes?.length >= 4) {
+    const jy = rightSource.gamepad.axes[3]  // -1 arriba, +1 abajo
+    if (Math.abs(jy) > 0.15) {
+      xrScale = Math.max(0.05, Math.min(2.0, xrScale - jy * 0.008))
+      pointsGroup.scale.setScalar(xrScale)
+    }
+  }
+
+  // ── Joystick izquierdo (axes[2]/[3]) → rotar nube ──
+  if (leftSource?.gamepad?.axes?.length >= 4) {
+    const jx = leftSource.gamepad.axes[2]  // izq/der
+    const jy = leftSource.gamepad.axes[3]  // arr/abj
+    if (Math.abs(jx) > 0.15 || Math.abs(jy) > 0.15) {
+      _quat.setFromAxisAngle(_axisY,  jx * 0.03)
+      pointsGroup.quaternion.premultiply(_quat)
+      _quat.setFromAxisAngle(_axisX, -jy * 0.03)
+      pointsGroup.quaternion.premultiply(_quat)
     }
   }
 }
@@ -1147,8 +1218,9 @@ async function startXRSession() {
     document.getElementById('cameraVideo').style.display = 'none'
 
     // Nube a 1.5m frente al usuario
+    xrScale = 0.35
     pointsGroup.position.set(-0.3, 0, -1.5)
-    pointsGroup.scale.setScalar(0.35)
+    pointsGroup.scale.setScalar(xrScale)
 
     // Crear panel 3D y controllers
     createXRPanel()
