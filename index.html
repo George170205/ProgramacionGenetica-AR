@@ -641,11 +641,18 @@ function createXRPanel() {
 // ── Detecta qué botón fue apuntado por el controller ──
 function handleXRSelect(controller) {
   if (!xrPanel) return
-  xrRaycaster.setFromXRController(controller)
+
+  // Three.js r128 no tiene setFromXRController — extraemos el ray manualmente
+  const origin    = new THREE.Vector3()
+  const direction = new THREE.Vector3()
+  origin.setFromMatrixPosition(controller.matrixWorld)
+  direction.set(0, 0, -1).applyQuaternion(controller.quaternion).normalize()
+  xrRaycaster.set(origin, direction)
+
   const hits = xrRaycaster.intersectObject(xrPanel)
   if (!hits.length) return
 
-  const uv = hits[0].uv  // 0-1
+  const uv = hits[0].uv
   const px = uv.x * XR_PANEL_W
   const py = (1 - uv.y) * XR_PANEL_H
 
@@ -664,16 +671,86 @@ function handleXRBtnClick(id) {
     if (xrSession) xrSession.end()
     return
   }
-  if (id === '__gen') return  // slider — no interactivo por toque simple
-  // Simular click en el botón DOM equivalente
+  if (id === '__gen') return
+
+  // csvBtn no puede abrir file picker en XR — mostramos panel de URL
+  if (id === 'csvBtn') {
+    showXRCsvInput()
+    return
+  }
+
   const domBtn = document.getElementById(id)
   if (domBtn && !domBtn.disabled) {
+    flashXRBtn(id)
     domBtn.click()
-    drawXRPanel()   // refrescar panel tras acción
+    setTimeout(() => drawXRPanel(), 250)
   }
 }
 
-// ── Registra los controllers del Quest ──
+// ── Panel secundario: cargar CSV por URL en XR ──
+let xrCsvPanel = null
+
+function showXRCsvInput() {
+  // Si ya existe, lo quitamos (toggle)
+  if (xrCsvPanel) {
+    scene.remove(xrCsvPanel)
+    xrCsvPanel = null
+    return
+  }
+
+  // Canvas con instrucciones y campo de URL
+  const c = document.createElement('canvas')
+  c.width = 700; c.height = 300
+  const ctx = c.getContext('2d')
+
+  ctx.fillStyle = 'rgba(10,15,40,0.97)'
+  roundRect(ctx, 0, 0, 700, 300, 20); ctx.fill()
+  ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 3
+  roundRect(ctx, 0, 0, 700, 300, 20); ctx.stroke()
+
+  ctx.fillStyle = '#fbbf24'
+  ctx.font = 'bold 28px Arial'
+  ctx.textAlign = 'center'
+  ctx.fillText('📂 Cargar CSV', 350, 48)
+
+  ctx.fillStyle = '#94a3b8'
+  ctx.font = '20px Arial'
+  ctx.fillText('Sal del AR, carga el CSV en 2D', 350, 90)
+  ctx.fillText('y vuelve a entrar al AR.', 350, 118)
+
+  ctx.fillStyle = '#c7d2fe'
+  ctx.font = '18px Arial'
+  ctx.fillText('El CSV cargado persiste al entrar en AR.', 350, 165)
+
+  // Botón cerrar
+  ctx.fillStyle = '#374151'
+  roundRect(ctx, 200, 210, 300, 60, 12); ctx.fill()
+  ctx.fillStyle = '#fff'
+  ctx.font = 'bold 22px Arial'
+  ctx.fillText('✕ Cerrar', 350, 248)
+
+  const tex = new THREE.CanvasTexture(c)
+  const geo = new THREE.PlaneGeometry(0.7, 0.3)
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
+  xrCsvPanel = new THREE.Mesh(geo, mat)
+  xrCsvPanel.position.set(0, 0.4, -1.2)
+  scene.add(xrCsvPanel)
+
+  // Auto-cerrar en 5 segundos
+  setTimeout(() => {
+    if (xrCsvPanel) { scene.remove(xrCsvPanel); xrCsvPanel = null }
+  }, 5000)
+}
+
+// Flash visual de feedback cuando se activa un botón
+function flashXRBtn(id) {
+  const btn = XR_BTNS.find(b => b.id === id)
+  if (!btn) return
+  const orig = btn.color
+  btn.color = '#ffffff'
+  drawXRPanel()
+  setTimeout(() => { btn.color = orig; drawXRPanel() }, 200)
+}
 function setupXRControllers() {
   for (let i = 0; i < 2; i++) {
     const ctrl = renderer.xr.getController(i)
@@ -737,11 +814,10 @@ async function startXRSession() {
 
     xrSession.addEventListener('end', () => {
       xrSession = null
-      // Limpiar panel y controllers de la escena
       if (xrPanel) { scene.remove(xrPanel); xrPanel = null }
+      if (xrCsvPanel) { scene.remove(xrCsvPanel); xrCsvPanel = null }
       xrControllers.forEach(c => scene.remove(c))
       xrControllers.length = 0
-      // Restaurar estado normal
       pointsGroup.position.set(0, 0, 0)
       pointsGroup.scale.setScalar(1.0)
       document.getElementById('cameraVideo').style.display = 'block'
