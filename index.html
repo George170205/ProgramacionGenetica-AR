@@ -119,6 +119,11 @@
       color: #1f2937; border: 2px solid #3b82f6; border-radius: 10px;
       text-align: center; background: white;
     }
+    #speedSelect {
+      padding: 6px 8px; font-size: 13px; font-weight: 700;
+      color: #1f2937; border: 2px solid #6366f1; border-radius: 10px;
+      background: white; cursor: pointer; outline: none;
+    }
 
     #expressionBox {
       position: fixed; bottom: 20px; left: 50%;
@@ -183,6 +188,7 @@
         min-width: 44px; padding: 5px 8px;
         font-size: 13px; border-radius: 8px;
       }
+      #speedSelect { font-size: 11px; padding: 5px 6px; border-radius: 8px; }
 
       #gestureHint { font-size: 10px; padding: 6px 12px; bottom: 16px; }
 
@@ -308,6 +314,13 @@
       <label for="generationSlider">Generación:</label>
       <input type="range" id="generationSlider" min="1" max="100" value="1" step="1" disabled />
       <input type="text"  id="generationValue"  value="1" readonly />
+      <select id="speedSelect" title="Velocidad">
+        <option value="800">½x</option>
+        <option value="400" selected>1x</option>
+        <option value="200">2x</option>
+        <option value="100">4x</option>
+        <option value="50">8x</option>
+      </select>
     </div>
 
     <div id="resizeHandle"></div>
@@ -441,19 +454,22 @@ let xrRaycaster  = new THREE.Raycaster()
 let xrControllers = []    // referencias a los controllers del Quest
 
 // Definición de botones del panel XR (posición normalizada 0-1 en el canvas)
-const XR_PANEL_W = 800, XR_PANEL_H = 520
+const XR_PANEL_W = 800, XR_PANEL_H = 480
 const XR_BTNS = [
-  { id:'csvBtn',        label:'📂 CSV',         x:0.05, y:0.08, w:0.42, h:0.10, color:'#3b82f6' },
-  { id:'playBtn',       label:'▶ Play',          x:0.53, y:0.08, w:0.42, h:0.10, color:'#10b981', disabled:true },
-  { id:'showAllBtn',    label:'👁 Show All',     x:0.05, y:0.22, w:0.42, h:0.10, color:'#6366f1', disabled:true },
-  { id:'evolutionBtn',  label:'🏆 Best Evol.',   x:0.53, y:0.22, w:0.42, h:0.10, color:'#f59e0b', disabled:true },
-  { id:'convergenceBtn',label:'📈 Convergence',  x:0.05, y:0.36, w:0.42, h:0.10, color:'#3b82f6', disabled:true },
-  { id:'moveBtn',       label:'✋ Mover',         x:0.53, y:0.36, w:0.42, h:0.10, color:'#64748b' },
-  { id:'floatBtn',      label:'✨ Flotar',        x:0.05, y:0.50, w:0.42, h:0.10, color:'#64748b' },
-  { id:'resetViewBtn',  label:'🎯 Reset',         x:0.53, y:0.50, w:0.42, h:0.10, color:'#64748b' },
-  // Slider generación — solo display, no interactivo por ahora
-  { id:'__gen',         label:'',                x:0.05, y:0.65, w:0.90, h:0.08, color:'#1e3a5f', isSlider:true },
-  { id:'__close',       label:'✕ Salir AR',      x:0.25, y:0.82, w:0.50, h:0.12, color:'#dc2626' },
+  { id:'csvBtn',        label:'📂 CSV',          x:0.05, y:0.08, w:0.42, h:0.11, color:'#3b82f6' },
+  { id:'playBtn',       label:'▶ Play',           x:0.53, y:0.08, w:0.42, h:0.11, color:'#10b981', disabled:true },
+  { id:'showAllBtn',    label:'👁 Show All',      x:0.05, y:0.23, w:0.42, h:0.11, color:'#6366f1', disabled:true },
+  { id:'evolutionBtn',  label:'🏆 Best Evol.',    x:0.53, y:0.23, w:0.42, h:0.11, color:'#f59e0b', disabled:true },
+  { id:'convergenceBtn',label:'📈 Convergence',   x:0.05, y:0.38, w:0.42, h:0.11, color:'#3b82f6', disabled:true },
+  { id:'moveBtn',       label:'✋ Mover',          x:0.53, y:0.38, w:0.42, h:0.11, color:'#64748b' },
+  { id:'resetViewBtn',  label:'🎯 Reset',          x:0.05, y:0.53, w:0.42, h:0.11, color:'#64748b' },
+  // Velocidad — botones ½x 1x 2x 4x
+  { id:'__speed_800',   label:'½x',               x:0.05, y:0.68, w:0.20, h:0.09, color:'#374151', isSpeed:true, ms:800 },
+  { id:'__speed_400',   label:'1x',               x:0.28, y:0.68, w:0.20, h:0.09, color:'#3b82f6', isSpeed:true, ms:400 },
+  { id:'__speed_200',   label:'2x',               x:0.51, y:0.68, w:0.20, h:0.09, color:'#374151', isSpeed:true, ms:200 },
+  { id:'__speed_100',   label:'4x',               x:0.74, y:0.68, w:0.20, h:0.09, color:'#374151', isSpeed:true, ms:100 },
+  { id:'__gen',         label:'',                 x:0.05, y:0.80, w:0.90, h:0.07, color:'#1e3a5f', isSlider:true },
+  { id:'__close',       label:'✕ Salir AR',       x:0.25, y:0.89, w:0.50, h:0.09, color:'#dc2626' },
 ]
 
 // ============================================================
@@ -575,7 +591,6 @@ function drawXRPanel() {
     const w = btn.w * W, h = btn.h * H
 
     if (btn.isSlider) {
-      // Barra de generación
       ctx.fillStyle = '#1e3a5f'
       roundRect(ctx, x, y, w, h, 8); ctx.fill()
       if (maxGeneration > 0) {
@@ -590,17 +605,26 @@ function drawXRPanel() {
       return
     }
 
+    if (btn.isSpeed) {
+      const isActive = animSpeed === btn.ms
+      ctx.fillStyle = isActive ? '#6366f1' : '#374151'
+      roundRect(ctx, x, y, w, h, 8); ctx.fill()
+      ctx.fillStyle = isActive ? '#fff' : '#94a3b8'
+      ctx.font = `bold 18px Arial`
+      ctx.textAlign = 'center'
+      ctx.fillText(btn.label, x + w / 2, y + h / 2 + 6)
+      return
+    }
+
     const isDisabled = btn.disabled && parsedData.length === 0
-    const isActive   = (btn.id === 'moveBtn' && moveMode) ||
-                       (btn.id === 'floatBtn' && floatEnabled) ||
-                       (btn.id === 'evolutionBtn' && tourRunning)
+    const isActive   = (btn.id === 'moveBtn'      && moveMode)   ||
+                       (btn.id === 'evolutionBtn'  && tourRunning)
 
     ctx.fillStyle = isDisabled ? '#374151' : isActive ? '#ec4899' : btn.color
     ctx.globalAlpha = isDisabled ? 0.45 : 1.0
     roundRect(ctx, x, y, w, h, 12); ctx.fill()
     ctx.globalAlpha = 1.0
 
-    // Texto botón
     ctx.fillStyle = '#ffffff'
     ctx.font = `bold 20px Arial`
     ctx.textAlign = 'center'
@@ -666,17 +690,35 @@ function handleXRSelect(ctrl) {
 }
 
 function handleXRBtnClick(id) {
-  if (id === '__close') {
-    if (xrSession) xrSession.end()
-    return
-  }
-  if (id === '__gen') return
+  if (id === '__close') { if (xrSession) xrSession.end(); return }
+  if (id === '__gen')   return
 
-  // csvBtn no puede abrir file picker en XR — mostramos panel de URL
-  if (id === 'csvBtn') {
-    showXRCsvInput()
+  // Botones de velocidad
+  if (id.startsWith('__speed_')) {
+    const ms = parseInt(id.replace('__speed_', ''))
+    animSpeed = ms
+    // Actualizar selector DOM si existe
+    const sel = document.getElementById('speedSelect')
+    if (sel) sel.value = ms
+    // Reiniciar intervalo si está corriendo
+    if (isPlaying) {
+      clearInterval(animationInterval)
+      animationInterval = setInterval(() => {
+        showPointsUpToGeneration(currentGeneration)
+        document.getElementById('generationSlider').value = currentGeneration
+        document.getElementById('generationValue').value  = currentGeneration
+        currentGeneration++
+        if (currentGeneration > maxGeneration) stopAnimation()
+      }, animSpeed)
+    }
+    drawXRPanel()
     return
   }
+
+  if (id === 'csvBtn') { showXRCsvInput(); return }
+
+  // Convergencia en AR: mostrar como panel 3D flotante
+  if (id === 'convergenceBtn') { showXRConvergence(); return }
 
   const domBtn = document.getElementById(id)
   if (domBtn && !domBtn.disabled) {
@@ -684,6 +726,90 @@ function handleXRBtnClick(id) {
     domBtn.click()
     setTimeout(() => drawXRPanel(), 250)
   }
+}
+
+// ── Convergencia como panel 3D en AR ──
+let xrConvPanel = null
+
+function showXRConvergence() {
+  // Toggle
+  if (xrConvPanel) { scene.remove(xrConvPanel); xrConvPanel = null; return }
+
+  if (!parsedData.length) return
+  const pts = parsedData
+    .filter(d => d.isBest && d.train !== null && !isNaN(d.train) && d.generation > 0)
+    .sort((a, b) => a.generation - b.generation)
+  if (pts.length < 2) return
+
+  // Dibujar la gráfica en un canvas offscreen
+  const W = 600, H = 380
+  const c   = document.createElement('canvas')
+  c.width = W; c.height = H
+
+  // Fondo oscuro
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = 'rgba(10,15,40,0.95)'
+  roundRect(ctx, 0, 0, W, H, 16); ctx.fill()
+  ctx.strokeStyle = 'rgba(99,102,241,0.6)'; ctx.lineWidth = 2
+  roundRect(ctx, 0, 0, W, H, 16); ctx.stroke()
+
+  // Título
+  ctx.fillStyle = '#c7d2fe'; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center'
+  ctx.fillText('📈 Convergencia — Train vs Generación', W / 2, 26)
+
+  // Redibujar la gráfica en este canvas usando la misma lógica
+  const PAD = { top: 36, right: 20, bottom: 40, left: 60 }
+  const cW  = W - PAD.left - PAD.right
+  const cH  = H - PAD.top  - PAD.bottom
+  const genMin = pts[0].generation, genMax = pts[pts.length-1].generation
+  const tVals  = pts.map(d => d.train)
+  const tMin   = Math.min(...tVals), tMax = Math.max(...tVals)
+  const tPad   = (tMax - tMin) * 0.08 || 0.1
+  const xOf = g => PAD.left + ((g - genMin) / (genMax - genMin || 1)) * cW
+  const yOf = t => PAD.top  + (1 - (t - (tMin-tPad)) / ((tMax+tPad)-(tMin-tPad))) * cH
+
+  // Grid
+  ctx.strokeStyle = 'rgba(99,102,241,0.12)'; ctx.lineWidth = 1
+  for (let i=0; i<=5; i++) {
+    const y = PAD.top + (i/5)*cH
+    ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(PAD.left+cW,y); ctx.stroke()
+  }
+
+  // Área
+  const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top+cH)
+  grad.addColorStop(0, 'rgba(99,102,241,0.35)'); grad.addColorStop(1, 'rgba(99,102,241,0.02)')
+  ctx.beginPath()
+  ctx.moveTo(xOf(pts[0].generation), PAD.top+cH)
+  pts.forEach(d => ctx.lineTo(xOf(d.generation), yOf(d.train)))
+  ctx.lineTo(xOf(pts[pts.length-1].generation), PAD.top+cH)
+  ctx.closePath(); ctx.fillStyle = grad; ctx.fill()
+
+  // Línea
+  ctx.beginPath(); ctx.moveTo(xOf(pts[0].generation), yOf(pts[0].train))
+  pts.forEach(d => ctx.lineTo(xOf(d.generation), yOf(d.train)))
+  ctx.strokeStyle = '#818cf8'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke()
+
+  // Último punto resaltado
+  const last = pts[pts.length-1]
+  ctx.beginPath(); ctx.arc(xOf(last.generation), yOf(last.train), 5, 0, Math.PI*2)
+  ctx.fillStyle = '#34d399'; ctx.fill()
+  ctx.fillStyle = '#34d399'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'left'
+  ctx.fillText(`Best: ${last.train.toExponential(3)} @ gen ${last.generation}`, PAD.left+4, PAD.top+14)
+
+  // Ejes labels
+  ctx.fillStyle = '#94a3b8'; ctx.font = '11px Arial'; ctx.textAlign = 'center'
+  ctx.fillText('Generación', PAD.left + cW/2, H-6)
+  ctx.save(); ctx.translate(13, PAD.top+cH/2); ctx.rotate(-Math.PI/2)
+  ctx.fillText('Train', 0, 0); ctx.restore()
+
+  // Crear mesh 3D
+  const tex = new THREE.CanvasTexture(c)
+  const geo = new THREE.PlaneGeometry(0.9, 0.57)
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
+  xrConvPanel = new THREE.Mesh(geo, mat)
+  // Posición: frente al usuario, centrado, a 1.3m
+  xrConvPanel.position.set(0, 0.6, -1.3)
+  scene.add(xrConvPanel)
 }
 
 // ── Panel secundario: cargar CSV por URL en XR ──
@@ -929,8 +1055,9 @@ async function startXRSession() {
 
     xrSession.addEventListener('end', () => {
       xrSession = null
-      if (xrPanel)    { scene.remove(xrPanel);    xrPanel = null }
-      if (xrCsvPanel) { scene.remove(xrCsvPanel); xrCsvPanel = null }
+      if (xrPanel)     { scene.remove(xrPanel);     xrPanel = null }
+      if (xrCsvPanel)  { scene.remove(xrCsvPanel);  xrCsvPanel = null }
+      if (xrConvPanel) { scene.remove(xrConvPanel); xrConvPanel = null }
       xrControllers.forEach(({ ctrl, dot }) => {
         scene.remove(ctrl)
         scene.remove(dot)
@@ -1328,17 +1455,21 @@ function drawConvergenceChart(pts) {
 // ============================================================
 // ANIMACIÓN
 // ============================================================
+let animSpeed = 400  // ms por generación — sincronizado con #speedSelect
+
 function startAnimation() {
   if (isPlaying) return
   isPlaying = true
   currentGeneration = 1
+  const speed = parseInt(document.getElementById('speedSelect')?.value || 400)
+  animSpeed = speed
   animationInterval = setInterval(() => {
     showPointsUpToGeneration(currentGeneration)
     document.getElementById('generationSlider').value = currentGeneration
     document.getElementById('generationValue').value  = currentGeneration
     currentGeneration++
     if (currentGeneration > maxGeneration) stopAnimation()
-  }, 400)
+  }, animSpeed)
   log('▶ Animación iniciada')
 }
 
@@ -1639,6 +1770,21 @@ function initControlButtons() {
   playBtn.addEventListener('click', () => {
     if (isPlaying) { stopAnimation() }
     else           { startAnimation(); playBtn.textContent = '⏸ Pause' }
+  })
+
+  // Cambiar velocidad en caliente — reinicia el intervalo si está corriendo
+  document.getElementById('speedSelect')?.addEventListener('change', e => {
+    animSpeed = parseInt(e.target.value)
+    if (isPlaying) {
+      clearInterval(animationInterval)
+      animationInterval = setInterval(() => {
+        showPointsUpToGeneration(currentGeneration)
+        document.getElementById('generationSlider').value = currentGeneration
+        document.getElementById('generationValue').value  = currentGeneration
+        currentGeneration++
+        if (currentGeneration > maxGeneration) stopAnimation()
+      }, animSpeed)
+    }
   })
 
   document.getElementById('showAllBtn').addEventListener('click', () => {
