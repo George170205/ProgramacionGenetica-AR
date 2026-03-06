@@ -522,6 +522,9 @@ function initThree(xrMode = false) {
       })
     }
 
+    // Actualizar controllers XR cada frame (drag, puntito, escala)
+    if (xrSession) updateXRControllers()
+
     // Refrescar panel XR (solo cuando está en sesión activa)
     if (xrPanel && xrSession) drawXRPanel()
 
@@ -640,16 +643,10 @@ function createXRPanel() {
 }
 
 // ── Detecta qué botón fue apuntado por el controller ──
-function handleXRSelect(controller) {
+function handleXRSelect(ctrl) {
   if (!xrPanel) return
-
-  // Three.js r128 no tiene setFromXRController — extraemos el ray manualmente
-  const origin    = new THREE.Vector3()
-  const direction = new THREE.Vector3()
-  origin.setFromMatrixPosition(controller.matrixWorld)
-  direction.set(0, 0, -1).applyQuaternion(controller.quaternion).normalize()
+  const { origin, direction } = getControllerRay(ctrl)
   xrRaycaster.set(origin, direction)
-
   const hits = xrRaycaster.intersectObject(xrPanel)
   if (!hits.length) return
 
@@ -752,22 +749,137 @@ function flashXRBtn(id) {
   drawXRPanel()
   setTimeout(() => { btn.color = orig; drawXRPanel() }, 200)
 }
+
+// ============================================================
+// XR CONTROLLERS — rotación, movimiento y zoom con triggers
+// ============================================================
+// Estado del drag por controller (índice 0 y 1)
+const xrDrag = [
+  { active: false, prevPos: new THREE.Vector3(), onPanel: false },
+  { active: false, prevPos: new THREE.Vector3(), onPanel: false },
+]
+
+function getControllerRay(ctrl) {
+  const origin    = new THREE.Vector3()
+  const direction = new THREE.Vector3(0, 0, -1)
+  origin.setFromMatrixPosition(ctrl.matrixWorld)
+  direction.applyQuaternion(ctrl.quaternion).normalize()
+  return { origin, direction }
+}
+
+function isAimingAtPanel(ctrl) {
+  if (!xrPanel) return false
+  const { origin, direction } = getControllerRay(ctrl)
+  xrRaycaster.set(origin, direction)
+  return xrRaycaster.intersectObject(xrPanel).length > 0
+}
+
 function setupXRControllers() {
   for (let i = 0; i < 2; i++) {
-    const ctrl = renderer.xr.getController(i)
+    const ctrl  = renderer.xr.getController(i)
+    const state = xrDrag[i]
 
-    // Línea de puntero (ray)
+    // ── Rayo visual ──
     const rayGeo = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(0, 0, 0),
       new THREE.Vector3(0, 0, -1)
     ])
-    const ray = new THREE.Line(rayGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }))
-    ray.scale.z = 2
+    const rayMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
+    const ray    = new THREE.Line(rayGeo, rayMat)
+    ray.scale.z  = 3
     ctrl.add(ray)
 
-    ctrl.addEventListener('select', () => handleXRSelect(ctrl))
+    // ── Puntito de impacto en el panel ──
+    const dotGeo = new THREE.SphereGeometry(0.008, 8, 8)
+    const dotMat = new THREE.MeshBasicMaterial({ color: 0xffd700 })
+    const dot    = new THREE.Mesh(dotGeo, dotMat)
+    dot.visible  = false
+    scene.add(dot)
+
+    // Trigger presionado → iniciar drag
+    ctrl.addEventListener('selectstart', () => {
+      state.active   = true
+      state.onPanel  = isAimingAtPanel(ctrl)
+      state.prevPos.setFromMatrixPosition(ctrl.matrixWorld)
+    })
+
+    // Trigger soltado → si no hubo movimiento significativo = click
+    ctrl.addEventListener('selectend', () => {
+      if (!state.active) return
+      const curPos = new THREE.Vector3().setFromMatrixPosition(ctrl.matrixWorld)
+      const moved  = curPos.distanceTo(state.prevPos) > 0.03  // 3cm de umbral
+
+      if (!moved && state.onPanel) {
+        // Click en panel
+        handleXRSelect(ctrl)
+      }
+      state.active  = false
+      state.onPanel = false
+      dot.visible   = false
+      rayMat.color.setHex(0xffffff)
+    })
+
     scene.add(ctrl)
-    xrControllers.push(ctrl)
+    xrControllers.push({ ctrl, dot, rayMat, state })
+  }
+}
+
+// Llamar cada frame en el animate loop para actualizar drag y puntito
+function updateXRControllers() {
+  if (!xrSession) return
+
+  xrControllers.forEach(({ ctrl, dot, rayMat, state }, idx) => {
+    // Actualizar puntito de impacto en panel
+    if (xrPanel) {
+      const { origin, direction } = getControllerRay(ctrl)
+      xrRaycaster.set(origin, direction)
+      const hits = xrRaycaster.intersectObject(xrPanel)
+      if (hits.length) {
+        dot.position.copy(hits[0].point)
+        dot.visible    = true
+        rayMat.color.setHex(0xffd700)  // dorado cuando apunta al panel
+      } else {
+        dot.visible    = state.active ? true : false
+        rayMat.color.setHex(0xffffff)
+      }
+    }
+
+    // Drag activo → rotar o mover la nube
+    if (state.active && !state.onPanel) {
+      const curPos = new THREE.Vector3().setFromMatrixPosition(ctrl.matrixWorld)
+      const delta  = curPos.clone().sub(state.prevPos)
+
+      if (moveMode) {
+        // Mover la nube en X/Y del mundo
+        cloudPosX += delta.x * 8
+        cloudPosY += delta.y * 8
+      } else {
+        // Rotar con quaternion (sin gimbal lock)
+        // Movimiento horizontal del controller → rotación Y
+        // Movimiento vertical del controller → rotación X
+        _quat.setFromAxisAngle(_axisY, delta.x * 12)
+        pointsGroup.quaternion.premultiply(_quat)
+        _quat.setFromAxisAngle(_axisX, -delta.y * 12)
+        pointsGroup.quaternion.premultiply(_quat)
+      }
+
+      state.prevPos.copy(curPos)
+    }
+  })
+
+  // Dos controllers activos a la vez → escalar (pinch en el espacio)
+  const both = xrControllers.filter(c => c.state.active && !c.state.onPanel)
+  if (both.length === 2) {
+    const p0 = new THREE.Vector3().setFromMatrixPosition(both[0].ctrl.matrixWorld)
+    const p1 = new THREE.Vector3().setFromMatrixPosition(both[1].ctrl.matrixWorld)
+    const dist = p0.distanceTo(p1)
+    if (both[0]._lastDist) {
+      const ratio = dist / both[0]._lastDist
+      cloudScale  = Math.max(MIN_SCALE, Math.min(MAX_SCALE, cloudScale * ratio))
+    }
+    both[0]._lastDist = dist
+  } else {
+    if (xrControllers[0]) xrControllers[0]._lastDist = null
   }
 }
 
@@ -818,7 +930,10 @@ async function startXRSession() {
       xrSession = null
       if (xrPanel)    { scene.remove(xrPanel);    xrPanel = null }
       if (xrCsvPanel) { scene.remove(xrCsvPanel); xrCsvPanel = null }
-      xrControllers.forEach(c => scene.remove(c))
+      xrControllers.forEach(({ ctrl, dot }) => {
+        scene.remove(ctrl)
+        scene.remove(dot)
+      })
       xrControllers.length = 0
       pointsGroup.position.set(0, 0, 0)
       pointsGroup.scale.setScalar(1.0)
