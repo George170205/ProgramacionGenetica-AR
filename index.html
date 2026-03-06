@@ -434,23 +434,34 @@ let xrSupported  = false
 // ============================================================
 // THREE.JS
 // ============================================================
-function initThree() {
-  const canvas = document.getElementById('threeCanvas')
-  scene    = new THREE.Scene()
+function initThree(xrMode = false) {
+  scene = new THREE.Scene()
 
-  renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: !isMobile })
-  renderer.setPixelRatio(isMobile ? Math.min(window.devicePixelRatio, 1.5) : window.devicePixelRatio)
-  renderer.setSize(window.innerWidth, window.innerHeight)
+  if (xrMode) {
+    // Para Quest XR: renderer sin canvas fijo — Three.js crea el suyo propio
+    renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true })
+    renderer.setPixelRatio(1)
+    renderer.setSize(window.innerWidth, window.innerHeight)
+    // Insertar el canvas del renderer en el DOM
+    renderer.domElement.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:1'
+    document.body.appendChild(renderer.domElement)
+  } else {
+    const canvas = document.getElementById('threeCanvas')
+    renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: !isMobile })
+    renderer.setPixelRatio(isMobile ? Math.min(window.devicePixelRatio, 1.5) : window.devicePixelRatio)
+    renderer.setSize(window.innerWidth, window.innerHeight)
+  }
+
   renderer.setClearColor(0x000000, 0)
-  renderer.xr.enabled = true   // habilitar WebXR en Three.js
+  renderer.xr.enabled = true
 
   camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.01, 200)
   camera.position.set(0, 0, 4)
 
-  scene.add(new THREE.AmbientLight(0xffffff, isMobile ? 0.75 : 0.45))
+  scene.add(new THREE.AmbientLight(0xffffff, (isMobile || xrMode) ? 0.75 : 0.45))
   const key = new THREE.DirectionalLight(0xffffff, 0.9)
   key.position.set(5, 8, 5); scene.add(key)
-  if (!isMobile) {
+  if (!isMobile && !xrMode) {
     const fill = new THREE.DirectionalLight(0x88aaff, 0.4)
     fill.position.set(-5, 2, -3); scene.add(fill)
     const rim = new THREE.DirectionalLight(0xffddaa, 0.3)
@@ -458,26 +469,21 @@ function initThree() {
   }
 
   pointsGroup = new THREE.Group()
-  // En WebXR la nube va frente a la cámara a ~1.5m
-  pointsGroup.position.set(0, 0, -1.5)
   scene.add(pointsGroup)
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight
     camera.updateProjectionMatrix()
-    renderer.setSize(window.innerWidth, window.innerHeight)
+    if (!xrSession) renderer.setSize(window.innerWidth, window.innerHeight)
   })
 
   const floatDelta = isMobile ? 0.022 : 0.016
 
-  // setAnimationLoop es compatible tanto con rAF normal como con WebXR
   renderer.setAnimationLoop(() => {
-    // Sin XR: posición y escala controladas por gestos normales
     if (!xrSession) {
       pointsGroup.position.set(cloudPosX, cloudPosY, 0)
       pointsGroup.scale.setScalar(cloudScale)
     }
-    // Con XR: la posición la maneja startXRSession, el usuario mueve con los controllers
 
     if (floatEnabled && pointMeshes.length > 0) {
       floatTime += floatDelta
@@ -495,7 +501,7 @@ function initThree() {
     renderer.render(scene, camera)
   })
 
-  log(`✅ Three.js listo (${isQuest ? '🥽 Quest' : isMobile ? '📱 móvil' : '🖥️ desktop'})`)
+  log(`✅ Three.js listo (${xrMode ? '🥽 Quest XR' : isQuest ? '🥽 Quest 2D' : isMobile ? '📱 móvil' : '🖥️ desktop'})`)
 }
 
 // ============================================================
@@ -521,36 +527,43 @@ async function checkXRSupport() {
 async function startXRSession() {
   if (!xrSupported) return
   try {
-    // Solicitar sesión AR con passthrough
+    // Quest requiere 'local' o 'local-floor' como feature obligatoria
+    // NO pasar environmentBlendMode — es propiedad de sesión, no de request
     xrSession = await navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures:  ['local-floor'],
-      optionalFeatures:  ['hand-tracking', 'bounded-floor', 'layers'],
-      environmentBlendMode: 'alpha-blend'  // passthrough real
+      requiredFeatures: ['local'],
+      optionalFeatures: ['local-floor', 'hand-tracking']
     })
 
-    renderer.xr.setReferenceSpaceType('local-floor')
+    // Configurar referencia ANTES de setSession
+    renderer.xr.setReferenceSpaceType('local')
+
+    // setSession hace que Three.js tome control del loop de render para XR
     await renderer.xr.setSession(xrSession)
 
-    // En AR el canvas ocupa toda la pantalla inmersiva
-    document.getElementById('threeCanvas').style.position = 'fixed'
-    document.getElementById('threeCanvas').style.zIndex   = '1'
-    document.getElementById('cameraVideo').style.display  = 'none'
+    // Ocultar video — el passthrough lo maneja el compositor del Quest
+    document.getElementById('cameraVideo').style.display = 'none'
 
-    // La nube flotante a 1.5m frente al usuario
-    pointsGroup.position.set(0, 1.2, -1.5)
-    pointsGroup.scale.setScalar(0.4)
+    // Posicionar la nube a 1.5m frente al usuario, a altura de ojos (~1.6m)
+    pointsGroup.position.set(0, 0, -1.5)
+    pointsGroup.scale.setScalar(0.35)
 
     xrSession.addEventListener('end', () => {
       xrSession = null
       log('🥽 Sesión AR terminada')
+      // Restaurar estado normal
       pointsGroup.position.set(0, 0, 0)
       pointsGroup.scale.setScalar(1.0)
       document.getElementById('cameraVideo').style.display = 'block'
     })
 
-    log('🥽 Sesión AR iniciada — passthrough activo')
+    log('🥽 Sesión AR iniciada')
   } catch (e) {
-    log(`❌ Error XR: ${e.message}`)
+    log(`❌ XR error: ${e.message}`)
+    // Mostrar error visible en pantalla
+    const s = document.createElement('div')
+    s.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:#f87171;padding:20px 30px;border-radius:12px;font-size:16px;z-index:99999;text-align:center'
+    s.innerHTML = `❌ Error AR:<br><small>${e.message}</small><br><br><button onclick="this.parentNode.remove()" style="padding:8px 16px;background:#3b82f6;color:white;border:none;border-radius:8px;cursor:pointer">Cerrar</button>`
+    document.body.appendChild(s)
     xrSession = null
   }
 }
@@ -1391,13 +1404,13 @@ document.getElementById('startBtn').addEventListener('click', async () => {
   log('🚀 Sistema AR iniciado — carga un CSV para comenzar')
 })
 
-// Botón Quest: iniciar Three.js primero, luego solicitar sesión XR
+// Botón Quest: iniciar Three.js en modo XR, luego solicitar sesión
 document.getElementById('startXRBtn').addEventListener('click', async () => {
   document.getElementById('startScreen').style.display = 'none'
-  // No iniciamos la cámara normal — WebXR maneja el passthrough
   document.getElementById('cameraVideo').style.display = 'none'
+  document.getElementById('threeCanvas').style.display = 'none' // usamos el canvas del renderer XR
   document.body.style.background = '#000'
-  initThree()
+  initThree(true)   // xrMode = true → renderer sin canvas fijo
   initGestures()
   initPanelControls()
   initControlButtons()
