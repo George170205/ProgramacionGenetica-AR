@@ -823,10 +823,10 @@ async function startXRSession() {
       pointsGroup.position.set(0, 0, 0)
       pointsGroup.scale.setScalar(1.0)
       document.getElementById('cameraVideo').style.display = 'block'
-      // Mostrar botón para poder volver a entrar sin recargar
+      // El panel siempre existe — mostrar botón para re-entrar
       const btn = document.getElementById('enterARBtn')
       if (btn) { btn.style.display = 'block'; btn.textContent = '🥽 Entrar AR'; btn.disabled = false }
-      log('🥽 Sesión AR terminada — puedes volver a entrar con el botón del panel')
+      log('🥽 Sesión AR terminada')
     })
 
     log('🥽 Sesión AR iniciada — panel 3D activo')
@@ -1689,18 +1689,21 @@ document.getElementById('startBtn').addEventListener('click', async () => {
   log('🚀 Sistema AR iniciado — carga un CSV para comenzar')
 })
 
-// Botón Quest: iniciar Three.js en modo XR, luego solicitar sesión
+// Botón Quest desde startScreen: inicializa todo y entra en AR
 document.getElementById('startXRBtn').addEventListener('click', async () => {
   document.getElementById('startScreen').style.display = 'none'
-  document.getElementById('cameraVideo').style.display = 'none'
-  document.getElementById('threeCanvas').style.display = 'none' // usamos el canvas del renderer XR
-  document.body.style.background = '#000'
-  initThree(true)   // xrMode = true → renderer sin canvas fijo
+  // Inicializar cámara normal como fallback (fondo oscuro si falla)
+  await startCamera()
+  initThree()
   initGestures()
   initPanelControls()
   initControlButtons()
+  // Entrar directamente al AR
+  const btn = document.getElementById('enterARBtn')
+  if (btn) { btn.textContent = '⏳ Iniciando...'; btn.disabled = true }
   await startXRSession()
-  log('🥽 Quest AR listo — carga un CSV para comenzar')
+  if (btn) { btn.textContent = '🥽 Entrar AR'; btn.disabled = false }
+  log('🥽 Quest AR listo')
 })
 </script>
 </body>
