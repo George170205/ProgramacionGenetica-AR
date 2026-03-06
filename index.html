@@ -675,7 +675,7 @@ function handleXRSelect(ctrl) {
   const { origin, direction } = getControllerRay(ctrl)
   xrRaycaster.set(origin, direction)
 
-  // Verificar hit en panel UI — pero solo actuar si cayó en un botón real
+  // Raycast solo al panel UI — esferas se manejan con botón A
   if (xrPanel) {
     const panelHits = xrRaycaster.intersectObject(xrPanel)
     if (panelHits.length) {
@@ -687,19 +687,9 @@ function handleXRSelect(ctrl) {
         const w = btn.w * XR_PANEL_W, h = btn.h * XR_PANEL_H
         if (px >= x && px <= x + w && py >= y && py <= y + h) {
           handleXRBtnClick(btn.id)
-          return   // solo salir si cayó en un botón real
+          return
         }
       }
-      // Cayó en el panel pero NO en ningún botón → ignorar panel,
-      // continuar hacia las esferas detrás
-    }
-  }
-
-  // Raycast a esferas (ignorando el panel en el intersect)
-  if (pointMeshes.length > 0) {
-    const hits = xrRaycaster.intersectObjects(pointMeshes)
-    if (hits.length > 0 && hits[0].object.userData.expression) {
-      showExpressionXR(hits[0].object.userData.expression, hits[0].point)
     }
   }
 }
@@ -972,6 +962,9 @@ function isAimingAtPanel(ctrl) {
   return xrRaycaster.intersectObject(xrPanel).length > 0
 }
 
+// Estado del botón A (evitar repetición por frame)
+let btnA_wasPressed = false
+
 function setupXRControllers() {
   for (let i = 0; i < 2; i++) {
     const ctrl  = renderer.xr.getController(i)
@@ -987,30 +980,24 @@ function setupXRControllers() {
     ray.scale.z  = 3
     ctrl.add(ray)
 
-    // ── Puntito de impacto en el panel ──
+    // ── Puntito de impacto ──
     const dotGeo = new THREE.SphereGeometry(0.008, 8, 8)
     const dotMat = new THREE.MeshBasicMaterial({ color: 0xffd700 })
     const dot    = new THREE.Mesh(dotGeo, dotMat)
     dot.visible  = false
     scene.add(dot)
 
-    // Trigger presionado → iniciar drag
+    // Trigger → drag / click en panel
     ctrl.addEventListener('selectstart', () => {
-      state.active   = true
-      state.onPanel  = isAimingAtPanel(ctrl)
+      state.active  = true
+      state.onPanel = isAimingAtPanel(ctrl)
       state.prevPos.setFromMatrixPosition(ctrl.matrixWorld)
     })
-
-    // Trigger soltado → si no hubo movimiento significativo = click
     ctrl.addEventListener('selectend', () => {
       if (!state.active) return
       const curPos = new THREE.Vector3().setFromMatrixPosition(ctrl.matrixWorld)
-      const moved  = curPos.distanceTo(state.prevPos) > 0.03  // 3cm de umbral
-
-      if (!moved && state.onPanel) {
-        // Click en panel
-        handleXRSelect(ctrl)
-      }
+      const moved  = curPos.distanceTo(state.prevPos) > 0.03
+      if (!moved && state.onPanel) handleXRSelect(ctrl)
       state.active  = false
       state.onPanel = false
       dot.visible   = false
@@ -1100,6 +1087,31 @@ function updateXRControllers() {
     both[0]._lastDist = dist
   } else {
     if (xrControllers[0]) xrControllers[0]._lastDist = null
+  }
+
+  // ── Botón A (controller derecho, index 1) → mostrar expresión de esfera apuntada ──
+  // buttons[4] = A en Quest Touch controller
+  const session = renderer.xr.getSession()
+  if (session) {
+    const sources = Array.from(session.inputSources)
+    const rightSource = sources.find(s => s.handedness === 'right')
+    if (rightSource?.gamepad?.buttons?.[4]) {
+      const btnA = rightSource.gamepad.buttons[4].pressed
+      if (btnA && !btnA_wasPressed) {
+        // Botón A recién presionado — raycast desde controller derecho
+        const rightCtrl = xrControllers.find((_, i) => i === 1)?.ctrl
+                       || xrControllers[1]?.ctrl
+        if (rightCtrl && pointMeshes.length > 0) {
+          const { origin, direction } = getControllerRay(rightCtrl)
+          xrRaycaster.set(origin, direction)
+          const hits = xrRaycaster.intersectObjects(pointMeshes)
+          if (hits.length > 0 && hits[0].object.userData.expression) {
+            showExpressionXR(hits[0].object.userData.expression, hits[0].point)
+          }
+        }
+      }
+      btnA_wasPressed = btnA
+    }
   }
 }
 
