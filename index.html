@@ -128,10 +128,35 @@
     #expressionBox {
       position: fixed; bottom: 20px; left: 50%;
       transform: translateX(-50%);
-      background: rgba(0,0,0,0.85); color: white;
-      padding: 12px 18px; border-radius: 10px;
-      font-size: 14px; max-width: 90%;
+      background: rgba(8, 12, 30, 0.94);
+      color: white;
+      padding: 14px 20px; border-radius: 14px;
+      font-size: 14px; max-width: 92%;
       display: none; z-index: 9999; pointer-events: none;
+      border: 1px solid rgba(99,102,241,0.45);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      line-height: 1.5;
+    }
+
+    /* Tooltip de la gráfica de convergencia */
+    #convTooltip {
+      position: fixed;
+      background: rgba(8,12,30,0.95);
+      border: 1px solid rgba(129,140,248,0.5);
+      border-radius: 10px;
+      padding: 9px 13px;
+      font-size: 12px;
+      color: #e2e8f0;
+      pointer-events: none;
+      display: none;
+      z-index: 10010;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      white-space: nowrap;
+      line-height: 1.6;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
     #gestureHint {
       position: fixed; bottom: 30px; left: 50%;
@@ -344,6 +369,7 @@
   </div>
 
   <div id="expressionBox"></div>
+  <div id="convTooltip"></div>
 
 <script>
 // ============================================================
@@ -359,6 +385,10 @@ let csvData = null, parsedData = [], generations = [], colors = []
 let isPlaying = false, currentGeneration = 1, maxGeneration = 0
 let animationInterval = null
 let minX, maxX, minY, maxY, minZ, maxZ
+
+// Convergencia — guardamos puntos y posiciones renderizadas para tooltip + animación
+let convPts         = []   // todos los puntos isBest ordenados
+let convRenderedPts = []   // [{x, y, gen, train, expr}] en píxeles del canvas
 
 // Panel UI
 let isDraggingPanel = false, isResizingPanel = false
@@ -698,28 +728,42 @@ function handleXRSelect(ctrl) {
 let xrExprPanel = null
 let xrExprTimeout = null
 
-function showExpressionXR(expr, point) {
+function showExpressionXR(userData, point) {
   // Limpiar anterior
   if (xrExprPanel) { scene.remove(xrExprPanel); xrExprPanel = null }
   clearTimeout(xrExprTimeout)
 
-  const W = 600, H = 120
+  const expr  = typeof userData === 'string' ? userData : (userData.expression || 'Sin expresión')
+  const gen   = typeof userData === 'object' ? userData.generation  : null
+  const train = typeof userData === 'object' ? userData.train       : null
+  const best  = typeof userData === 'object' ? userData.isBest      : false
+
+  const W = 620, H = best || (train !== null) ? 160 : 120
   const c   = document.createElement('canvas')
   c.width = W; c.height = H
   const ctx = c.getContext('2d')
 
   // Fondo
-  ctx.fillStyle = 'rgba(0,0,0,0.85)'
+  ctx.fillStyle = 'rgba(0,0,0,0.88)'
   roundRect(ctx, 0, 0, W, H, 16); ctx.fill()
-  ctx.strokeStyle = '#6366f1'; ctx.lineWidth = 2
+  ctx.strokeStyle = best ? '#34d399' : '#6366f1'; ctx.lineWidth = 2
   roundRect(ctx, 0, 0, W, H, 16); ctx.stroke()
 
-  // Texto — ajustar tamaño si es largo
+  // Etiqueta
+  ctx.fillStyle = '#818cf8'
+  ctx.font = 'bold 13px Arial'
+  ctx.textAlign = 'left'
+  ctx.fillText('🔬 Expresión simbólica', 18, 22)
+  if (best) {
+    ctx.fillStyle = '#34d399'; ctx.textAlign = 'right'
+    ctx.fillText('🏆 IsBest', W - 18, 22)
+  }
+
+  // Expresión — font monospace, wrap si es largo
   ctx.fillStyle = '#ffffff'
   ctx.textAlign = 'center'
-  const fontSize = expr.length > 60 ? 14 : expr.length > 40 ? 16 : 20
+  const fontSize = expr.length > 70 ? 13 : expr.length > 45 ? 15 : 18
   ctx.font = `${fontSize}px monospace`
-  // Wrap si es muy largo
   const maxW = W - 30
   const words = expr.split(' ')
   let line = '', lines = []
@@ -730,24 +774,36 @@ function showExpressionXR(expr, point) {
   }
   lines.push(line)
   const lineH = fontSize + 4
-  const startY = H / 2 - (lines.length - 1) * lineH / 2
-  lines.forEach((l, i) => ctx.fillText(l, W / 2, startY + i * lineH))
+  const exprY = (train !== null || gen !== null) ? 44 : H / 2 - (lines.length - 1) * lineH / 2
+  lines.forEach((l, i) => ctx.fillText(l, W / 2, exprY + i * lineH))
+
+  // Generación + fitness
+  if (gen !== null || train !== null) {
+    const infoY = exprY + lines.length * lineH + 12
+    ctx.font = '14px Arial'; ctx.textAlign = 'center'
+    let info = ''
+    if (gen !== null && gen > 0) info += `📊 Gen: ${gen}`
+    if (train !== null && !isNaN(train)) {
+      if (info) info += '   '
+      info += `🎯 Fitness: ${train.toExponential(4)}`
+    }
+    ctx.fillStyle = '#94a3b8'
+    ctx.fillText(info, W / 2, infoY)
+  }
 
   const tex = new THREE.CanvasTexture(c)
-  const geo = new THREE.PlaneGeometry(0.5, 0.1)
+  const geo = new THREE.PlaneGeometry(0.52, H / W * 0.52)
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthTest: false })
   xrExprPanel = new THREE.Mesh(geo, mat)
 
   // Posicionar justo encima del punto tocado
-  xrExprPanel.position.copy(point).add(new THREE.Vector3(0, 0.12, 0))
-  // Orientar hacia la cámara
+  xrExprPanel.position.copy(point).add(new THREE.Vector3(0, 0.14, 0))
   xrExprPanel.lookAt(camera.position)
   scene.add(xrExprPanel)
 
-  // Auto-cerrar en 4 segundos
   xrExprTimeout = setTimeout(() => {
     if (xrExprPanel) { scene.remove(xrExprPanel); xrExprPanel = null }
-  }, 4000)
+  }, 5000)
 }
 
 function handleXRBtnClick(id) {
@@ -768,6 +824,10 @@ function handleXRBtnClick(id) {
         showPointsUpToGeneration(currentGeneration)
         document.getElementById('generationSlider').value = currentGeneration
         document.getElementById('generationValue').value  = currentGeneration
+        const convPanel = document.getElementById('convergencePanel')
+        if (convPanel.classList.contains('visible') && convPts.length >= 2) {
+          drawConvergenceChart(convPts, currentGeneration)
+        }
         currentGeneration++
         if (currentGeneration > maxGeneration) stopAnimation()
       }, animSpeed)
@@ -797,7 +857,9 @@ function showXRConvergence() {
   if (xrConvPanel) { scene.remove(xrConvPanel); xrConvPanel = null; return }
 
   if (!parsedData.length) return
-  const pts = parsedData
+
+  // Usar convPts global si ya están calculados, si no calcular
+  const pts = convPts.length >= 2 ? convPts : parsedData
     .filter(d => d.isBest && d.train !== null && !isNaN(d.train) && d.generation > 0)
     .sort((a, b) => a.generation - b.generation)
   if (pts.length < 2) return
@@ -1110,7 +1172,7 @@ function updateXRControllers() {
       xrRaycaster.set(origin, direction)
       const hits = xrRaycaster.intersectObjects(pointMeshes)
       if (hits.length > 0 && hits[0].object.userData.expression)
-        showExpressionXR(hits[0].object.userData.expression, hits[0].point)
+        showExpressionXR(hits[0].object.userData, hits[0].point)
     }
     btnA_wasPressed = btnA
   }
@@ -1482,11 +1544,11 @@ function startTour() {
 function showConvergence() {
   if (!parsedData.length) { log('❌ Carga un CSV primero'); return }
 
-  const pts = parsedData
+  convPts = parsedData
     .filter(d => d.isBest && d.train !== null && !isNaN(d.train) && d.generation > 0)
     .sort((a, b) => a.generation - b.generation)
 
-  if (pts.length < 2) {
+  if (convPts.length < 2) {
     log('⚠️ No hay suficientes puntos IsBest con Train para graficar')
     return
   }
@@ -1494,16 +1556,16 @@ function showConvergence() {
   const panel = document.getElementById('convergencePanel')
   panel.classList.add('visible')
 
-  // Esperar a que el browser calcule las dimensiones del panel antes de dibujar
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      drawConvergenceChart(pts)
-      log(`📈 Convergencia: ${pts.length} puntos graficados`)
+      drawConvergenceChart(convPts)
+      attachConvergenceTooltip()
+      log(`📈 Convergencia: ${convPts.length} puntos graficados`)
     })
   })
 }
 
-function drawConvergenceChart(pts) {
+function drawConvergenceChart(pts, highlightUpToGen = Infinity) {
   const canvas = document.getElementById('convCanvas')
   const panel  = document.getElementById('convergencePanel')
 
@@ -1523,7 +1585,7 @@ function drawConvergenceChart(pts) {
   const cW = W - PAD.left - PAD.right
   const cH = H - PAD.top  - PAD.bottom
 
-  // Rangos
+  // Rangos — siempre basados en TODOS los puntos para ejes estables
   const genMin  = pts[0].generation
   const genMax  = pts[pts.length - 1].generation
   const trainVals = pts.map(d => d.train)
@@ -1533,6 +1595,9 @@ function drawConvergenceChart(pts) {
 
   const xOf = gen   => PAD.left + ((gen - genMin) / (genMax - genMin || 1)) * cW
   const yOf = train => PAD.top  + (1 - (train - (tMin - tPad)) / ((tMax + tPad) - (tMin - tPad))) * cH
+
+  // Puntos activos hasta highlightUpToGen
+  const activePts = pts.filter(d => d.generation <= highlightUpToGen)
 
   // ── Fondo
   ctx.clearRect(0, 0, W, H)
@@ -1551,43 +1616,61 @@ function drawConvergenceChart(pts) {
     ctx.beginPath(); ctx.moveTo(x, PAD.top); ctx.lineTo(x, PAD.top + cH); ctx.stroke()
   }
 
-  // ── Área bajo la curva (gradiente)
-  const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + cH)
-  grad.addColorStop(0,   'rgba(99,102,241,0.35)')
-  grad.addColorStop(1,   'rgba(99,102,241,0.02)')
-  ctx.beginPath()
-  ctx.moveTo(xOf(pts[0].generation), PAD.top + cH)
-  pts.forEach(d => ctx.lineTo(xOf(d.generation), yOf(d.train)))
-  ctx.lineTo(xOf(pts[pts.length - 1].generation), PAD.top + cH)
-  ctx.closePath()
-  ctx.fillStyle = grad
-  ctx.fill()
+  // ── Área bajo la curva de puntos activos (gradiente)
+  if (activePts.length >= 2) {
+    const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + cH)
+    grad.addColorStop(0,   'rgba(99,102,241,0.35)')
+    grad.addColorStop(1,   'rgba(99,102,241,0.02)')
+    ctx.beginPath()
+    ctx.moveTo(xOf(activePts[0].generation), PAD.top + cH)
+    activePts.forEach(d => ctx.lineTo(xOf(d.generation), yOf(d.train)))
+    ctx.lineTo(xOf(activePts[activePts.length - 1].generation), PAD.top + cH)
+    ctx.closePath()
+    ctx.fillStyle = grad
+    ctx.fill()
 
-  // ── Línea de la curva
-  ctx.beginPath()
-  ctx.moveTo(xOf(pts[0].generation), yOf(pts[0].train))
-  pts.forEach(d => ctx.lineTo(xOf(d.generation), yOf(d.train)))
-  ctx.strokeStyle = '#818cf8'
-  ctx.lineWidth   = 2.5
-  ctx.lineJoin    = 'round'
-  ctx.stroke()
+    // ── Línea de la curva
+    ctx.beginPath()
+    ctx.moveTo(xOf(activePts[0].generation), yOf(activePts[0].train))
+    activePts.forEach(d => ctx.lineTo(xOf(d.generation), yOf(d.train)))
+    ctx.strokeStyle = '#818cf8'
+    ctx.lineWidth   = 2.5
+    ctx.lineJoin    = 'round'
+    ctx.stroke()
+  } else if (activePts.length === 1) {
+    // Un solo punto activo — solo dibujamos el punto
+  }
 
-  // ── Puntos
-  pts.forEach((d, i) => {
+  // ── Puntos futuros (si highlightUpToGen < Infinity) — atenuados
+  const futurePts = highlightUpToGen < Infinity ? pts.filter(d => d.generation > highlightUpToGen) : []
+  futurePts.forEach(d => {
     const x = xOf(d.generation), y = yOf(d.train)
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(99,102,241,0.18)'; ctx.fill()
+  })
+
+  // ── Puntos activos — resaltados
+  convRenderedPts = []
+  activePts.forEach((d, i) => {
+    const x = xOf(d.generation), y = yOf(d.train)
+    // Guardar para tooltip
+    convRenderedPts.push({ x, y, gen: d.generation, train: d.train, expr: d.expression || '' })
     // Halo
     ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2)
     ctx.fillStyle = 'rgba(129,140,248,0.2)'; ctx.fill()
     // Punto
     ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2)
-    ctx.fillStyle = i === pts.length - 1 ? '#34d399' : '#a5b4fc'
+    const isLast = i === activePts.length - 1
+    ctx.fillStyle = isLast ? '#34d399' : '#a5b4fc'
     ctx.fill()
   })
 
-  // Último punto resaltado (mejor resultado)
-  const last = pts[pts.length - 1]
-  ctx.beginPath(); ctx.arc(xOf(last.generation), yOf(last.train), 6, 0, Math.PI * 2)
-  ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2; ctx.stroke()
+  // Último punto activo resaltado (mejor resultado hasta ahora)
+  if (activePts.length > 0) {
+    const last = activePts[activePts.length - 1]
+    ctx.beginPath(); ctx.arc(xOf(last.generation), yOf(last.train), 6, 0, Math.PI * 2)
+    ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2; ctx.stroke()
+  }
 
   // ── Ejes
   ctx.strokeStyle = 'rgba(148,163,184,0.4)'
@@ -1624,11 +1707,122 @@ function drawConvergenceChart(pts) {
   ctx.fillText('Train (error)', 0, 0)
   ctx.restore()
 
-  // ── Anotación mejor valor
-  ctx.fillStyle = '#34d399'; ctx.font = 'bold 10px Mulish, sans-serif'
-  ctx.textAlign = 'left'
-  ctx.fillText(`Best: ${last.train.toExponential(3)} @ gen ${last.generation}`,
-    PAD.left + 4, PAD.top + 14)
+  // ── Anotación mejor valor hasta ahora
+  if (activePts.length > 0) {
+    const last = activePts[activePts.length - 1]
+    ctx.fillStyle = '#34d399'; ctx.font = 'bold 10px Mulish, sans-serif'
+    ctx.textAlign = 'left'
+    ctx.fillText(`Best: ${last.train.toExponential(3)} @ gen ${last.generation}`,
+      PAD.left + 4, PAD.top + 14)
+  }
+
+  // ── Indicador de animación en curso
+  if (highlightUpToGen < Infinity && activePts.length < pts.length) {
+    const progress = activePts.length / pts.length
+    const barW = cW * progress
+    ctx.fillStyle = 'rgba(129,140,248,0.25)'
+    ctx.fillRect(PAD.left, PAD.top + cH + 24, barW, 4)
+    ctx.strokeStyle = 'rgba(129,140,248,0.5)'; ctx.lineWidth = 1
+    ctx.strokeRect(PAD.left, PAD.top + cH + 24, cW, 4)
+    ctx.fillStyle = '#818cf8'; ctx.font = '9px Mulish, sans-serif'; ctx.textAlign = 'right'
+    ctx.fillText(`${activePts.length}/${pts.length} puntos`, PAD.left + cW, PAD.top + cH + 20)
+  }
+}
+
+// ============================================================
+// TOOLTIP GRÁFICA DE CONVERGENCIA
+// ============================================================
+function attachConvergenceTooltip() {
+  const canvas  = document.getElementById('convCanvas')
+  const tooltip = document.getElementById('convTooltip')
+  if (!canvas || !tooltip) return
+
+  // Remover listeners anteriores clonando el canvas
+  const newCanvas = canvas.cloneNode(true)
+  canvas.parentNode.replaceChild(newCanvas, canvas)
+
+  // Redibujamos en el nuevo canvas
+  if (convPts.length >= 2) drawConvergenceChart(convPts)
+
+  const freshCanvas = document.getElementById('convCanvas')
+
+  freshCanvas.addEventListener('mousemove', e => {
+    if (!convRenderedPts.length) return
+    const rect = freshCanvas.getBoundingClientRect()
+    const mx   = e.clientX - rect.left
+    const my   = e.clientY - rect.top
+    const RADIUS = 14
+
+    let found = null, minDist = Infinity
+    convRenderedPts.forEach(p => {
+      const d = Math.hypot(p.x - mx, p.y - my)
+      if (d < RADIUS && d < minDist) { minDist = d; found = p }
+    })
+
+    if (found) {
+      freshCanvas.style.cursor = 'crosshair'
+      const exprShort = found.expr
+        ? (found.expr.length > 60 ? found.expr.slice(0, 58) + '…' : found.expr)
+        : ''
+      tooltip.innerHTML =
+        `<div style="color:#818cf8;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;margin-bottom:4px;">📍 Punto de convergencia</div>` +
+        `<div style="display:flex;gap:12px;margin-bottom:${exprShort ? 5 : 0}px;">` +
+          `<span>📊 Gen: <strong style="color:#c7d2fe">${found.gen}</strong></span>` +
+          `<span>🎯 Fitness: <strong style="color:#34d399">${found.train.toExponential(4)}</strong></span>` +
+        `</div>` +
+        (exprShort ? `<div style="font-family:'Courier New',monospace;font-size:11px;color:#a5b4fc;word-break:break-all;">${exprShort}</div>` : '')
+
+      // Posición del tooltip — evitar que se salga de la pantalla
+      const tW = 280, tH = 80
+      let tx = e.clientX + 14
+      let ty = e.clientY - 10
+      if (tx + tW > window.innerWidth)  tx = e.clientX - tW - 14
+      if (ty + tH > window.innerHeight) ty = e.clientY - tH - 10
+      tooltip.style.left    = `${tx}px`
+      tooltip.style.top     = `${ty}px`
+      tooltip.style.display = 'block'
+    } else {
+      freshCanvas.style.cursor = 'default'
+      tooltip.style.display = 'none'
+    }
+  })
+
+  freshCanvas.addEventListener('mouseleave', () => {
+    tooltip.style.display = 'none'
+    freshCanvas.style.cursor = 'default'
+  })
+
+  // Touch: tap sobre un punto
+  freshCanvas.addEventListener('touchend', e => {
+    if (!convRenderedPts.length) return
+    const rect = freshCanvas.getBoundingClientRect()
+    const tx   = e.changedTouches[0].clientX - rect.left
+    const ty   = e.changedTouches[0].clientY - rect.top
+    const RADIUS = 20
+
+    let found = null, minDist = Infinity
+    convRenderedPts.forEach(p => {
+      const d = Math.hypot(p.x - tx, p.y - ty)
+      if (d < RADIUS && d < minDist) { minDist = d; found = p }
+    })
+
+    if (found) {
+      tooltip.innerHTML =
+        `<div style="color:#818cf8;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;margin-bottom:4px;">📍 Punto de convergencia</div>` +
+        `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:${found.expr ? 5 : 0}px;">` +
+          `<span>📊 Gen: <strong style="color:#c7d2fe">${found.gen}</strong></span>` +
+          `<span>🎯 Fitness: <strong style="color:#34d399">${found.train.toExponential(4)}</strong></span>` +
+        `</div>` +
+        (found.expr ? `<div style="font-family:'Courier New',monospace;font-size:10px;color:#a5b4fc;word-break:break-all;">${found.expr.length > 55 ? found.expr.slice(0,53)+'…' : found.expr}</div>` : '')
+
+      tooltip.style.left    = `${e.changedTouches[0].clientX - 10}px`
+      tooltip.style.top     = `${e.changedTouches[0].clientY - 90}px`
+      tooltip.style.display = 'block'
+      clearTimeout(tooltip._t)
+      tooltip._t = setTimeout(() => { tooltip.style.display = 'none' }, 3500)
+      e.stopPropagation()
+    }
+  }, { passive: true })
 }
 
 // ============================================================
@@ -1646,6 +1840,11 @@ function startAnimation() {
     showPointsUpToGeneration(currentGeneration)
     document.getElementById('generationSlider').value = currentGeneration
     document.getElementById('generationValue').value  = currentGeneration
+    // Sincronizar gráfica de convergencia si está abierta
+    const panel = document.getElementById('convergencePanel')
+    if (panel.classList.contains('visible') && convPts.length >= 2) {
+      drawConvergenceChart(convPts, currentGeneration)
+    }
     currentGeneration++
     if (currentGeneration > maxGeneration) stopAnimation()
   }, animSpeed)
@@ -1812,7 +2011,7 @@ function initGestures() {
         ray.setFromCamera(mouse, camera)
         const hits = ray.intersectObjects(pointMeshes)
         if (hits.length > 0 && hits[0].object.userData.expression)
-          showExpression(hits[0].object.userData.expression)
+          showExpression(hits[0].object.userData)
       }
     }
     touch1 = e.touches.length > 0 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null
@@ -1862,16 +2061,35 @@ function initGestures() {
     ray.setFromCamera(mouse, camera)
     const hits = ray.intersectObjects(pointMeshes)
     if (hits.length > 0 && hits[0].object.userData.expression)
-      showExpression(hits[0].object.userData.expression)
+      showExpression(hits[0].object.userData)
   })
 }
 
-function showExpression(expr) {
-  const box = document.getElementById('expressionBox')
-  box.textContent = expr
+function showExpression(userData) {
+  const box   = document.getElementById('expressionBox')
+  const expr  = typeof userData === 'string' ? userData : (userData.expression || 'Sin expresión')
+  const gen   = typeof userData === 'object' ? userData.generation  : null
+  const train = typeof userData === 'object' ? userData.train       : null
+  const best  = typeof userData === 'object' ? userData.isBest      : false
+
+  let html = `<div style="font-size:11px;color:#818cf8;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:5px;">🔬 Expresión simbólica</div>`
+  html += `<div style="font-family:'Courier New',monospace;font-size:13px;color:#e2e8f0;margin-bottom:8px;word-break:break-word;">${expr}</div>`
+
+  if (gen !== null && gen > 0) {
+    html += `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;">`
+    html += `<span style="color:#94a3b8">📊 Generación: <strong style="color:#c7d2fe">${gen}</strong></span>`
+    if (train !== null && !isNaN(train)) {
+      const color = best ? '#34d399' : '#fbbf24'
+      html += `<span style="color:#94a3b8">🎯 Fitness: <strong style="color:${color}">${train.toExponential(4)}</strong></span>`
+    }
+    if (best) html += `<span style="color:#34d399;font-weight:700">🏆 IsBest</span>`
+    html += `</div>`
+  }
+
+  box.innerHTML = html
   box.style.display = 'block'
   clearTimeout(box._t)
-  box._t = setTimeout(() => box.style.display = 'none', 4000)
+  box._t = setTimeout(() => box.style.display = 'none', 6000)
 }
 
 // ============================================================
@@ -1986,6 +2204,10 @@ function initControlButtons() {
         showPointsUpToGeneration(currentGeneration)
         document.getElementById('generationSlider').value = currentGeneration
         document.getElementById('generationValue').value  = currentGeneration
+        const panel = document.getElementById('convergencePanel')
+        if (panel.classList.contains('visible') && convPts.length >= 2) {
+          drawConvergenceChart(convPts, currentGeneration)
+        }
         currentGeneration++
         if (currentGeneration > maxGeneration) stopAnimation()
       }, animSpeed)
@@ -2075,10 +2297,7 @@ function initControlButtons() {
     convPanel.style.width  = `${newW}px`
     convPanel.style.height = `${newH}px`
     // Redibujar la gráfica al nuevo tamaño
-    const pts = parsedData
-      .filter(d => d.isBest && d.train !== null && !isNaN(d.train) && d.generation > 0)
-      .sort((a, b) => a.generation - b.generation)
-    if (pts.length >= 2) drawConvergenceChart(pts)
+    if (convPts.length >= 2) drawConvergenceChart(convPts)
   })
   window.addEventListener('mouseup', () => { convResizing = false })
   document.getElementById('resetViewBtn').addEventListener('click', () => {
@@ -2122,6 +2341,11 @@ function initControlButtons() {
     currentGeneration = parseInt(e.target.value)
     valBox.value = currentGeneration
     showPointsUpToGeneration(currentGeneration)
+    // Sincronizar gráfica de convergencia si está abierta
+    const panel = document.getElementById('convergencePanel')
+    if (panel.classList.contains('visible') && convPts.length >= 2) {
+      drawConvergenceChart(convPts, currentGeneration)
+    }
   })
 
   // Botón "Entrar AR" dentro del panel — re-entra sin recargar
