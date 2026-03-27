@@ -1,375 +1,374 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>TSP AR Visualizer</title>
-  <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;600;700&display=swap" rel="stylesheet" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; overflow: hidden; font-family: 'Mulish', Arial, sans-serif; background: #000; }
+ <meta charset="UTF-8" />
+ <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+ <title>TSP AR Visualizer</title>
+ <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;600;700&display=swap" rel="stylesheet" />
+ <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+ <style>
+ * { box-sizing: border-box; }
+ body { margin: 0; overflow: hidden; font-family: 'Mulish', Arial, sans-serif; background: #000; }
 
-    #cameraVideo {
-      position: fixed; top: 0; left: 0;
-      width: 100%; height: 100%;
-      object-fit: cover; z-index: 0;
-    }
-    #threeCanvas {
-      position: fixed; top: 0; left: 0;
-      width: 100%; height: 100%;
-      z-index: 1; pointer-events: none;
-    }
-    #gestureLayer {
-      position: fixed; top: 0; left: 0;
-      width: 100%; height: 100%;
-      z-index: 2;                  /* debajo de paneles UI (z-index 9999) */
-      touch-action: none;
-      -webkit-user-select: none;
-      user-select: none;
-      overscroll-behavior: none;
-    }
+ #cameraVideo {
+ position: fixed; top: 0; left: 0;
+ width: 100%; height: 100%;
+ object-fit: cover; z-index: 0;
+ }
+ #threeCanvas {
+ position: fixed; top: 0; left: 0;
+ width: 100%; height: 100%;
+ z-index: 1; pointer-events: none;
+ }
+ #gestureLayer {
+ position: fixed; top: 0; left: 0;
+ width: 100%; height: 100%;
+ z-index: 2; /* debajo de paneles UI (z-index 9999) */
+ touch-action: none;
+ -webkit-user-select: none;
+ user-select: none;
+ overscroll-behavior: none;
+ }
 
-    /* Pantalla de inicio */
-    #startScreen {
-      position: fixed; inset: 0;
-      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      z-index: 99999; color: white; gap: 20px;
-      text-align: center; padding: 40px;
-    }
-    #startScreen h1 { font-size: 28px; margin: 0; }
-    #startScreen p  { font-size: 15px; color: #94a3b8; margin: 0; max-width: 320px; }
-    #startBtn {
-      padding: 16px 40px;
-      background: linear-gradient(135deg, #3b82f6, #6366f1);
-      color: white; border: none; border-radius: 14px;
-      font-size: 18px; font-weight: 700; cursor: pointer;
-      box-shadow: 0 8px 24px rgba(99,102,241,0.4);
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    #startBtn:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(99,102,241,0.5); }
+ /* Pantalla de inicio */
+ #startScreen {
+ position: fixed; inset: 0;
+ background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+ display: flex; flex-direction: column;
+ align-items: center; justify-content: center;
+ z-index: 99999; color: white; gap: 20px;
+ text-align: center; padding: 40px;
+ }
+ #startScreen h1 { font-size: 28px; margin: 0; }
+ #startScreen p { font-size: 15px; color: #94a3b8; margin: 0; max-width: 320px; }
+ #startBtn {
+ padding: 16px 40px;
+ background: linear-gradient(135deg, #3b82f6, #6366f1);
+ color: white; border: none; border-radius: 14px;
+ font-size: 18px; font-weight: 700; cursor: pointer;
+ box-shadow: 0 8px 24px rgba(99,102,241,0.4);
+ transition: transform 0.2s, box-shadow 0.2s;
+ }
+ #startBtn:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(99,102,241,0.5); }
 
-    /* Panel de Control — por defecto en la parte inferior */
-    #controlPanel {
-      position: fixed;
-      bottom: 12px; top: auto; left: 50%;
-      transform: translateX(-50%);
-      background: rgba(255,255,255,0.15);
-      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-      padding: 20px; border-radius: 20px;
-      box-shadow: 0 -8px 40px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3);
-      z-index: 9999; display: flex; flex-direction: column; gap: 15px;
-      min-width: 340px; max-width: 92vw;
-      transition: all 0.3s ease;
-      border: 2px solid rgba(255,255,255,0.5);
-    }
-    #panelHeader {
-      display: flex; justify-content: space-between; align-items: center;
-      cursor: move; user-select: none; padding: 10px; border-radius: 12px;
-      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-      border: 1px solid rgba(59,130,246,0.2);
-    }
-    #panelTitle { font-weight: 700; color: #1f2937; font-size: 16px; }
-    #panelControls { display: flex; gap: 8px; align-items: center; }
-    .panel-icon-btn {
-      background: linear-gradient(145deg, #ffffff, #f1f5f9);
-      border: 1px solid rgba(0,0,0,0.1); font-size: 16px;
-      cursor: pointer; padding: 6px 10px; border-radius: 8px; transition: all 0.2s;
-    }
-    .panel-icon-btn:hover { background: #e2e8f0; transform: translateY(-1px); }
-    #zoomLevel { font-size: 11px; color: #6b7280; min-width: 44px; text-align: center; }
+ /* Panel de Control — por defecto en la parte inferior */
+ #controlPanel {
+ position: fixed;
+ bottom: 12px; top: auto; left: 50%;
+ transform: translateX(-50%);
+ background: rgba(255,255,255,0.15);
+ backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+ padding: 20px; border-radius: 20px;
+ box-shadow: 0 -8px 40px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3);
+ z-index: 9999; display: flex; flex-direction: column; gap: 15px;
+ min-width: 340px; max-width: 92vw;
+ transition: all 0.3s ease;
+ border: 2px solid rgba(255,255,255,0.5);
+ }
+ #panelHeader {
+ display: flex; justify-content: space-between; align-items: center;
+ cursor: move; user-select: none; padding: 10px; border-radius: 12px;
+ background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+ border: 1px solid rgba(59,130,246,0.2);
+ }
+ #panelTitle { font-weight: 700; color: #1f2937; font-size: 16px; }
+ #panelControls { display: flex; gap: 8px; align-items: center; }
+ .panel-icon-btn {
+ background: linear-gradient(145deg, #ffffff, #f1f5f9);
+ border: 1px solid rgba(0,0,0,0.1); font-size: 16px;
+ cursor: pointer; padding: 6px 10px; border-radius: 8px; transition: all 0.2s;
+ }
+ .panel-icon-btn:hover { background: #e2e8f0; transform: translateY(-1px); }
+ #zoomLevel { font-size: 11px; color: #6b7280; min-width: 44px; text-align: center; }
 
-    #buttonRow { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-    .control-btn {
-      padding: 10px 18px; font-size: 14px; font-weight: 600;
-      color: white; border: none; border-radius: 10px; cursor: pointer;
-      transition: all 0.2s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      white-space: nowrap;
-    }
-    .control-btn:hover   { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.25); }
-    .control-btn:active  { transform: translateY(0); }
-    .control-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-    #csvBtn         { background: #3b82f6; }
-    #playBtn        { background: #10b981; }
-    #showAllBtn     { background: #6366f1; }
-    #evolutionBtn   { background: #f59e0b; }
-    #convergenceBtn { background: #3b82f6; }
-    #resetViewBtn   { background: #64748b; }
+ #buttonRow { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+ .control-btn {
+ padding: 10px 18px; font-size: 14px; font-weight: 600;
+ color: white; border: none; border-radius: 10px; cursor: pointer;
+ transition: all 0.2s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+ white-space: nowrap;
+ }
+ .control-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.25); }
+ .control-btn:active { transform: translateY(0); }
+ .control-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+ #csvBtn { background: #3b82f6; }
+ #playBtn { background: #10b981; }
+ #showAllBtn { background: #6366f1; }
+ #evolutionBtn { background: #f59e0b; }
+ #convergenceBtn { background: #3b82f6; }
+ #resetViewBtn { background: #64748b; }
 
-    #sliderRow {
-      display: flex; align-items: center; gap: 12px; padding: 12px;
-      background: linear-gradient(145deg, #f8fafc, #ffffff);
-      border-radius: 12px; border: 1px solid rgba(0,0,0,0.05);
-    }
-    #sliderRow label { font-size: 13px; color: #1f2937; white-space: nowrap; }
-    #generationSlider {
-      flex: 1; height: 8px; border-radius: 4px;
-      outline: none; background: #e5e7eb; -webkit-appearance: none;
-    }
-    #generationSlider::-webkit-slider-thumb {
-      -webkit-appearance: none; width: 22px; height: 22px;
-      border-radius: 50%; background: linear-gradient(145deg, #60a5fa, #3b82f6);
-      cursor: pointer; border: 2px solid white;
-      box-shadow: 0 3px 8px rgba(59,130,246,0.4);
-    }
-    #generationValue {
-      min-width: 60px; padding: 8px 12px; font-size: 16px; font-weight: 700;
-      color: #1f2937; border: 2px solid #3b82f6; border-radius: 10px;
-      text-align: center; background: white;
-    }
-    #speedSelect {
-      padding: 6px 8px; font-size: 13px; font-weight: 700;
-      color: #1f2937; border: 2px solid #6366f1; border-radius: 10px;
-      background: white; cursor: pointer; outline: none;
-    }
+ #sliderRow {
+ display: flex; align-items: center; gap: 12px; padding: 12px;
+ background: linear-gradient(145deg, #f8fafc, #ffffff);
+ border-radius: 12px; border: 1px solid rgba(0,0,0,0.05);
+ }
+ #sliderRow label { font-size: 13px; color: #1f2937; white-space: nowrap; }
+ #generationSlider {
+ flex: 1; height: 8px; border-radius: 4px;
+ outline: none; background: #e5e7eb; -webkit-appearance: none;
+ }
+ #generationSlider::-webkit-slider-thumb {
+ -webkit-appearance: none; width: 22px; height: 22px;
+ border-radius: 50%; background: linear-gradient(145deg, #60a5fa, #3b82f6);
+ cursor: pointer; border: 2px solid white;
+ box-shadow: 0 3px 8px rgba(59,130,246,0.4);
+ }
+ #generationValue {
+ min-width: 60px; padding: 8px 12px; font-size: 16px; font-weight: 700;
+ color: #1f2937; border: 2px solid #3b82f6; border-radius: 10px;
+ text-align: center; background: white;
+ }
+ #speedSelect {
+ padding: 6px 8px; font-size: 13px; font-weight: 700;
+ color: #1f2937; border: 2px solid #6366f1; border-radius: 10px;
+ background: white; cursor: pointer; outline: none;
+ }
 
-    #expressionBox {
-      position: fixed; bottom: 20px; left: 50%;
-      transform: translateX(-50%);
-      background: rgba(8, 12, 30, 0.94);
-      color: white;
-      padding: 14px 20px; border-radius: 14px;
-      font-size: 14px; max-width: 92%;
-      display: none; z-index: 9999; pointer-events: none;
-      border: 1px solid rgba(99,102,241,0.45);
-      box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      line-height: 1.5;
-    }
+ #expressionBox {
+ position: fixed; bottom: 20px; left: 50%;
+ transform: translateX(-50%);
+ background: rgba(8, 12, 30, 0.94);
+ color: white;
+ padding: 14px 20px; border-radius: 14px;
+ font-size: 14px; max-width: 92%;
+ display: none; z-index: 9999; pointer-events: none;
+ border: 1px solid rgba(99,102,241,0.45);
+ box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04);
+ backdrop-filter: blur(12px);
+ -webkit-backdrop-filter: blur(12px);
+ line-height: 1.5;
+ }
 
-    /* Tooltip de la gráfica de convergencia */
-    #convTooltip {
-      position: fixed;
-      background: rgba(8,12,30,0.95);
-      border: 1px solid rgba(129,140,248,0.5);
-      border-radius: 10px;
-      padding: 9px 13px;
-      font-size: 12px;
-      color: #e2e8f0;
-      pointer-events: none;
-      display: none;
-      z-index: 10010;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-      white-space: nowrap;
-      line-height: 1.6;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-    }
-    #gestureHint {
-      position: fixed; bottom: 30px; left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.6); color: white;
-      padding: 8px 16px; border-radius: 20px; font-size: 12px;
-      z-index: 9998; pointer-events: none; transition: opacity 1s;
-      white-space: nowrap;
-    }
+ /* Tooltip de la gráfica de convergencia */
+ #convTooltip {
+ position: fixed;
+ background: rgba(8,12,30,0.95);
+ border: 1px solid rgba(129,140,248,0.5);
+ border-radius: 10px;
+ padding: 9px 13px;
+ font-size: 12px;
+ color: #e2e8f0;
+ pointer-events: none;
+ display: none;
+ z-index: 10010;
+ box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+ white-space: nowrap;
+ line-height: 1.6;
+ backdrop-filter: blur(8px);
+ -webkit-backdrop-filter: blur(8px);
+ }
+ #gestureHint {
+ position: fixed; bottom: 30px; left: 50%;
+ transform: translateX(-50%);
+ background: rgba(0,0,0,0.6); color: white;
+ padding: 8px 16px; border-radius: 20px; font-size: 12px;
+ z-index: 9998; pointer-events: none; transition: opacity 1s;
+ white-space: nowrap;
+ }
 
-    .panel-minimized { overflow: hidden !important; }
-    .panel-minimized #buttonRow,
-    .panel-minimized #sliderRow { display: none !important; }
+ .panel-minimized { overflow: hidden !important; }
+ .panel-minimized #buttonRow,
+ .panel-minimized #sliderRow { display: none !important; }
 
-    #resizeHandle {
-      position: absolute; bottom: 0; right: 0;
-      width: 28px; height: 28px; cursor: nwse-resize;
-      background: linear-gradient(135deg, transparent 50%, rgba(59,130,246,0.2) 50%);
-      border-radius: 0 0 18px 0; display: flex;
-      align-items: flex-end; justify-content: flex-end;
-      padding: 4px; font-size: 11px; color: #3b82f6; user-select: none;
-    }
-    #resizeHandle::after { content: '⋮⋮'; line-height: 0.8; opacity: 0.6; }
-    #csvInput { display: none; }
+ #resizeHandle {
+ position: absolute; bottom: 0; right: 0;
+ width: 28px; height: 28px; cursor: nwse-resize;
+ background: linear-gradient(135deg, transparent 50%, rgba(59,130,246,0.2) 50%);
+ border-radius: 0 0 18px 0; display: flex;
+ align-items: flex-end; justify-content: flex-end;
+ padding: 4px; font-size: 11px; color: #3b82f6; user-select: none;
+ }
+ #resizeHandle::after { content: '⋮⋮'; line-height: 0.8; opacity: 0.6; }
+ #csvInput { display: none; }
 
-    /* ── Mobile: panel compacto ── */
-    @media (max-width: 600px) {
-      #controlPanel {
-        bottom: 8px; top: auto;
-        padding: 10px;
-        gap: 8px;
-        min-width: 0;
-        width: 96vw;
-        max-width: 96vw;
-        border-radius: 14px;
-      }
-      #panelHeader { padding: 7px 8px; border-radius: 10px; }
-      #panelTitle  { font-size: 13px; }
-      .panel-icon-btn { font-size: 13px; padding: 5px 7px; border-radius: 6px; }
-      #zoomLevel { min-width: 32px; font-size: 10px; }
+ /* ── Mobile: panel compacto ── */
+ @media (max-width: 600px) {
+ #controlPanel {
+ bottom: 8px; top: auto;
+ padding: 10px;
+ gap: 8px;
+ min-width: 0;
+ width: 96vw;
+ max-width: 96vw;
+ border-radius: 14px;
+ }
+ #panelHeader { padding: 7px 8px; border-radius: 10px; }
+ #panelTitle { font-size: 13px; }
+ .panel-icon-btn { font-size: 13px; padding: 5px 7px; border-radius: 6px; }
+ #zoomLevel { min-width: 32px; font-size: 10px; }
 
-      #buttonRow { gap: 5px; }
-      .control-btn {
-        padding: 7px 11px;
-        font-size: 12px;
-        border-radius: 8px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-      }
+ #buttonRow { gap: 5px; }
+ .control-btn {
+ padding: 7px 11px;
+ font-size: 12px;
+ border-radius: 8px;
+ box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+ }
 
-      #sliderRow { padding: 8px; gap: 8px; border-radius: 10px; }
-      #sliderRow label { font-size: 11px; }
-      #generationSlider::-webkit-slider-thumb { width: 18px; height: 18px; }
-      #generationValue {
-        min-width: 44px; padding: 5px 8px;
-        font-size: 13px; border-radius: 8px;
-      }
-      #speedSelect { font-size: 11px; padding: 5px 6px; border-radius: 8px; }
+ #sliderRow { padding: 8px; gap: 8px; border-radius: 10px; }
+ #sliderRow label { font-size: 11px; }
+ #generationSlider::-webkit-slider-thumb { width: 18px; height: 18px; }
+ #generationValue {
+ min-width: 44px; padding: 5px 8px;
+ font-size: 13px; border-radius: 8px;
+ }
+ #speedSelect { font-size: 11px; padding: 5px 6px; border-radius: 8px; }
 
-      #gestureHint { font-size: 10px; padding: 6px 12px; bottom: 16px; }
+ #gestureHint { font-size: 10px; padding: 6px 12px; bottom: 16px; }
 
-      /* Convergencia en móvil: ocupa la mitad superior, deja espacio al panel de control */
-      #convergencePanel {
-        bottom: auto !important;
-        top: 8px !important;
-        left: 2vw !important;
-        right: 2vw !important;
-        width: 96vw !important;
-        height: 52vh !important;
-        border-radius: 16px !important;
-        min-width: unset;
-        min-height: unset;
-      }
-      #convResizeHandle { display: none; }
-      #convTitle { font-size: 12px; }
-    }
+ /* Convergencia en móvil: ocupa la mitad superior, deja espacio al panel de control */
+ #convergencePanel {
+ bottom: auto !important;
+ top: 8px !important;
+ left: 2vw !important;
+ right: 2vw !important;
+ width: 96vw !important;
+ height: 52vh !important;
+ border-radius: 16px !important;
+ min-width: unset;
+ min-height: unset;
+ }
+ #convResizeHandle { display: none; }
+ #convTitle { font-size: 12px; }
+ }
 
-    /* ── Panel de Convergencia ── */
-    #convergencePanel {
-      position: fixed;
-      bottom: 30px; right: 20px;
-      width: 380px; height: 280px;
-      background: rgba(10, 15, 30, 0.92);
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
-      border: 1px solid rgba(99, 102, 241, 0.4);
-      border-radius: 16px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
-      z-index: 10001;  /* por encima de todo, incluyendo controlPanel */
-      display: none;
-      flex-direction: column;
-      overflow: hidden;
-      min-width: 280px; min-height: 200px;
-    }
-    #convergencePanel.visible { display: flex; }
+ /* ── Panel de Convergencia ── */
+ #convergencePanel {
+ position: fixed;
+ bottom: 30px; right: 20px;
+ width: 380px; height: 280px;
+ background: rgba(10, 15, 30, 0.92);
+ backdrop-filter: blur(18px);
+ -webkit-backdrop-filter: blur(18px);
+ border: 1px solid rgba(99, 102, 241, 0.4);
+ border-radius: 16px;
+ box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+ z-index: 10001; /* por encima de todo, incluyendo controlPanel */
+ display: none;
+ flex-direction: column;
+ overflow: hidden;
+ min-width: 280px; min-height: 200px;
+ }
+ #convergencePanel.visible { display: flex; }
 
-    #convHeader {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 10px 14px;
-      background: rgba(99,102,241,0.15);
-      border-bottom: 1px solid rgba(99,102,241,0.25);
-      cursor: move; user-select: none;
-      flex-shrink: 0;
-    }
-    #convTitle { color: #c7d2fe; font-size: 13px; font-weight: 700; }
-    #convClose {
-      background: none; border: none; color: #94a3b8;
-      font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1;
-      transition: color 0.2s;
-    }
-    #convClose:hover { color: #f87171; }
+ #convHeader {
+ display: flex; justify-content: space-between; align-items: center;
+ padding: 10px 14px;
+ background: rgba(99,102,241,0.15);
+ border-bottom: 1px solid rgba(99,102,241,0.25);
+ cursor: move; user-select: none;
+ flex-shrink: 0;
+ }
+ #convTitle { color: #c7d2fe; font-size: 13px; font-weight: 700; }
+ #convClose {
+ background: none; border: none; color: #94a3b8;
+ font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1;
+ transition: color 0.2s;
+ }
+ #convClose:hover { color: #f87171; }
 
-    #convCanvas {
-      flex: 1; width: 100%; display: block;
-      border-radius: 0 0 16px 16px;
-    }
+ #convCanvas {
+ flex: 1; width: 100%; display: block;
+ border-radius: 0 0 16px 16px;
+ }
 
-    #convResizeHandle {
-      position: absolute; bottom: 0; right: 0;
-      width: 22px; height: 22px; cursor: nwse-resize;
-      background: linear-gradient(135deg, transparent 50%, rgba(99,102,241,0.3) 50%);
-      border-radius: 0 0 16px 0;
-    }
+ #convResizeHandle {
+ position: absolute; bottom: 0; right: 0;
+ width: 22px; height: 22px; cursor: nwse-resize;
+ background: linear-gradient(135deg, transparent 50%, rgba(99,102,241,0.3) 50%);
+ border-radius: 0 0 16px 0;
+ }
 
-    .control-btn.active {
-      box-shadow: 0 0 0 3px rgba(255,255,255,0.6), 0 0 12px rgba(255,255,255,0.4);
-      filter: brightness(1.2);
-    }
-  </style>
+ .control-btn.active {
+ box-shadow: 0 0 0 3px rgba(255,255,255,0.6), 0 0 12px rgba(255,255,255,0.4);
+ filter: brightness(1.2);
+ }
+ </style>
 </head>
 <body>
 
-  <!-- Pantalla de inicio -->
-  <div id="startScreen">
-    <div style="font-size:56px">🧬</div>
-    <h1>TSP AR Visualizer</h1>
-    <p>Visualiza nubes de puntos 3D sobre la cámara en tiempo real.<br>Carga un CSV y explora los datos en AR.</p>
-    <button id="startBtn">📷 Activar Cámara</button>
-    <button id="startXRBtn" style="display:none;padding:16px 40px;background:linear-gradient(135deg,#8b5cf6,#ec4899);color:white;border:none;border-radius:14px;font-size:18px;font-weight:700;cursor:pointer;box-shadow:0 8px 24px rgba(139,92,246,0.4)">
-      🥽 Entrar en AR (Quest)
-    </button>
-    <p id="xrStatus" style="font-size:12px;color:#64748b;margin:0"></p>
-  </div>
+ <!-- Pantalla de inicio -->
+ <div id="startScreen">
+ <h1>TSP AR Visualizer</h1>
+ <p>Visualiza nubes de puntos 3D sobre la cámara en tiempo real.<br>Carga un CSV y explora los datos en AR.</p>
+ <button id="startBtn">Activar Cámara</button>
+ <button id="startXRBtn" style="display:none;padding:16px 40px;background:linear-gradient(135deg,#8b5cf6,#ec4899);color:white;border:none;border-radius:14px;font-size:18px;font-weight:700;cursor:pointer;box-shadow:0 8px 24px rgba(139,92,246,0.4)">
+ Entrar en AR (Quest)
+ </button>
+ <p id="xrStatus" style="font-size:12px;color:#64748b;margin:0"></p>
+ </div>
 
-  <!-- Video de cámara (fondo) -->
-  <video id="cameraVideo" autoplay playsinline muted></video>
+ <!-- Video de cámara (fondo) -->
+ <video id="cameraVideo" autoplay playsinline muted></video>
 
-  <!-- Canvas Three.js (transparente, sobre el video) -->
-  <canvas id="threeCanvas"></canvas>
+ <!-- Canvas Three.js (transparente, sobre el video) -->
+ <canvas id="threeCanvas"></canvas>
 
-  <!-- Capa de gestos -->
-  <div id="gestureLayer"></div>
+ <!-- Capa de gestos -->
+ <div id="gestureLayer"></div>
 
-  <!-- Panel de Control -->
-  <div id="controlPanel">
-    <div id="panelHeader">
-      <div id="panelTitle">🧬 TSP AR Visualizer</div>
-      <div id="panelControls">
-        <span id="zoomLevel">100%</span>
-        <button class="panel-icon-btn" id="zoomOutBtn" title="Zoom Out">➖</button>
-        <button class="panel-icon-btn" id="zoomInBtn"  title="Zoom In">➕</button>
-        <button class="panel-icon-btn" id="resetZoomBtn" title="Reset Panel">🔄</button>
-        <button class="panel-icon-btn" id="minimizeBtn" title="Minimizar">➖</button>
-      </div>
-    </div>
+ <!-- Panel de Control -->
+ <div id="controlPanel">
+ <div id="panelHeader">
+ <div id="panelTitle">TSP AR Visualizer</div>
+ <div id="panelControls">
+ <span id="zoomLevel">100%</span>
+ <button class="panel-icon-btn" id="zoomOutBtn" title="Zoom Out">-</button>
+ <button class="panel-icon-btn" id="zoomInBtn" title="Zoom In">+</button>
+ <button class="panel-icon-btn" id="resetZoomBtn" title="Reset Panel">Reest.</button>
+ <button class="panel-icon-btn" id="minimizeBtn" title="Minimizar"></button>
+ </div>
+ </div>
 
-    <div id="buttonRow">
-      <button id="csvBtn"         class="control-btn">📂 CSV File</button>
-      <button id="playBtn"        class="control-btn" disabled>▶ Play</button>
-      <button id="showAllBtn"     class="control-btn" disabled>👁 Show All</button>
-      <button id="evolutionBtn"   class="control-btn" disabled>🏆 Best Evolution</button>
-      <button id="convergenceBtn" class="control-btn" disabled>📈 Convergence</button>
-      <button id="moveBtn"        class="control-btn">✋ Mover</button>
-      <button id="floatBtn"       class="control-btn">✨ Flotar</button>
-      <button id="resetViewBtn"   class="control-btn">🎯 Reset View</button>
-      <button id="enterARBtn"     class="control-btn" style="display:none;background:linear-gradient(135deg,#8b5cf6,#ec4899)">🥽 Entrar AR</button>
-    </div>
+ <div id="buttonRow">
+ <button id="csvBtn" class="control-btn">CSV File</button>
+ <button id="playBtn" class="control-btn" disabled>Play</button>
+ <button id="showAllBtn" class="control-btn" disabled>Show All</button>
+ <button id="evolutionBtn" class="control-btn" disabled>Best Evolution</button>
+ <button id="convergenceBtn" class="control-btn" disabled>Convergence</button>
+ <button id="moveBtn" class="control-btn">Mover</button>
+ <button id="floatBtn" class="control-btn">Flotar</button>
+ <button id="resetViewBtn" class="control-btn">Reset View</button>
+ <button id="enterARBtn" class="control-btn" style="display:none;background:linear-gradient(135deg,#8b5cf6,#ec4899)">Entrar AR</button>
+ </div>
 
 
-    <div id="sliderRow">
-      <label for="generationSlider">Generación:</label>
-      <input type="range" id="generationSlider" min="1" max="100" value="1" step="1" disabled />
-      <input type="text"  id="generationValue"  value="1" readonly />
-      <select id="speedSelect" title="Velocidad">
-        <option value="800">½x</option>
-        <option value="400" selected>1x</option>
-        <option value="200">2x</option>
-        <option value="100">4x</option>
-        <option value="50">8x</option>
-      </select>
-    </div>
+ <div id="sliderRow">
+ <label for="generationSlider">Generación:</label>
+ <input type="range" id="generationSlider" min="1" max="100" value="1" step="1" disabled />
+ <input type="text" id="generationValue" value="1" readonly />
+ <select id="speedSelect" title="Velocidad">
+ <option value="800">½x</option>
+ <option value="400" selected>1x</option>
+ <option value="200">2x</option>
+ <option value="100">4x</option>
+ <option value="50">8x</option>
+ </select>
+ </div>
 
-    <div id="resizeHandle"></div>
-  </div>
+ <div id="resizeHandle"></div>
+ </div>
 
-  <input type="file" id="csvInput" accept=".csv" />
+ <input type="file" id="csvInput" accept=".csv" />
 
-  <div id="gestureHint">
-    🖱️ Clic+arrastrar: rotar &nbsp;|&nbsp; Clic derecho: mover &nbsp;|&nbsp; Rueda: zoom<br>
-    📱 1 dedo: rotar &nbsp;|&nbsp; 2 dedos: mover+zoom
-  </div>
+ <div id="gestureHint">
+ Clic+arrastrar: rotar &nbsp;|&nbsp; Clic derecho: mover &nbsp;|&nbsp; Rueda: zoom<br>
+ 1 dedo: rotar &nbsp;|&nbsp; 2 dedos: mover+zoom
+ </div>
 
-  <!-- Panel de Convergencia -->
-  <div id="convergencePanel">
-    <div id="convHeader">
-      <span id="convTitle">📈 Convergencia — Train vs Generación</span>
-      <button id="convClose">✕</button>
-    </div>
-    <canvas id="convCanvas"></canvas>
-    <div id="convResizeHandle"></div>
-  </div>
+ <!-- Panel de Convergencia -->
+ <div id="convergencePanel">
+ <div id="convHeader">
+ <span id="convTitle">Convergencia — Train vs Generación</span>
+ <button id="convClose">X</button>
+ </div>
+ <canvas id="convCanvas"></canvas>
+ <div id="convResizeHandle"></div>
+ </div>
 
-  <div id="expressionBox"></div>
-  <div id="convTooltip"></div>
+ <div id="expressionBox"></div>
+ <div id="convTooltip"></div>
 
 <script>
 // ============================================================
@@ -387,8 +386,8 @@ let animationInterval = null
 let minX, maxX, minY, maxY, minZ, maxZ
 
 // Convergencia — guardamos puntos y posiciones renderizadas para tooltip + animación
-let convPts         = []   // todos los puntos isBest ordenados
-let convRenderedPts = []   // [{x, y, gen, train, expr}] en píxeles del canvas
+let convPts = [] // todos los puntos isBest ordenados
+let convRenderedPts = [] // [{x, y, gen, train, expr}] en píxeles del canvas
 
 // Panel UI
 let isDraggingPanel = false, isResizingPanel = false
@@ -405,22 +404,22 @@ let cloudPosX = 0, cloudPosY = 0
 let cloudScale = 1.0
 const MIN_SCALE = 0.2, MAX_SCALE = 5.0
 // Quaternion acumulado para rotación libre en los 3 ejes (sin gimbal lock)
-const _quat    = new THREE.Quaternion()
-const _axisX   = new THREE.Vector3(1, 0, 0)
-const _axisY   = new THREE.Vector3(0, 1, 0)
+const _quat = new THREE.Quaternion()
+const _axisX = new THREE.Vector3(1, 0, 0)
+const _axisY = new THREE.Vector3(0, 1, 0)
 
 // Modo mover (toggle) — cuando está activo, arrastrar mueve en vez de rotar
-let moveMode   = false
+let moveMode = false
 // Animación flotante de esferas
 let floatEnabled = false
-let floatTime    = 0
+let floatTime = 0
 // Base positions para la animación flotante (guardadas al crear puntos)
-let pointBasePosns = []   // [{x,y,z, ox,oy,oz}]  ox/oy/oz = offsets aleatorios de fase
+let pointBasePosns = [] // [{x,y,z, ox,oy,oz}] ox/oy/oz = offsets aleatorios de fase
 
 // Tour — línea que recorre la mejor solución punto a punto
-let tourLine      = null   // THREE.Line en escena
-let tourInterval  = null
-let tourRunning   = false
+let tourLine = null // THREE.Line en escena
+let tourInterval = null
+let tourRunning = false
 
 // Gestos
 let touch1 = null, touch2 = null, lastDist = 0
@@ -429,159 +428,157 @@ let touch1 = null, touch2 = null, lastDist = 0
 // CÁMARA — compatible iOS Safari + Android Chrome
 // ============================================================
 async function startCamera() {
-  const video = document.getElementById('cameraVideo')
+ const video = document.getElementById('cameraVideo')
 
-  // iOS Safari necesita estos atributos seteados antes de asignar srcObject
-  video.setAttribute('autoplay',    '')
-  video.setAttribute('muted',       '')
-  video.setAttribute('playsinline', '')
+ // iOS Safari necesita estos atributos seteados antes de asignar srcObject
+ video.setAttribute('autoplay', '')
+ video.setAttribute('muted', '')
+ video.setAttribute('playsinline', '')
 
-  // Intentamos cámara trasera primero, con fallback a cualquier cámara
-  const constraints = [
-    { video: { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-    { video: { facingMode: 'environment' } },
-    { video: true }   // último recurso — cualquier cámara disponible
-  ]
+ // Intentamos cámara trasera primero, con fallback a cualquier cámara
+ const constraints = [
+ { video: { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+ { video: { facingMode: 'environment' } },
+ { video: true } // último recurso — cualquier cámara disponible
+ ]
 
-  let stream = null
-  for (const c of constraints) {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia(c)
-      break
-    } catch (e) {
-      log(`⚠️ Intento fallido: ${e.message}`)
-    }
-  }
+ let stream = null
+ for (const c of constraints) {
+ try {
+ stream = await navigator.mediaDevices.getUserMedia(c)
+ break
+ } catch (e) {
+ log(` Intento fallido: ${e.message}`)
+ }
+ }
 
-  if (stream) {
-    video.srcObject = stream
-    // iOS requiere llamar play() dentro de un gesto de usuario (ya estamos en el click handler)
-    try { await video.play() } catch (e) { /* autoplay policy — ignorar, el video se inicia igual */ }
-    log('📷 Cámara activada')
-  } else {
-    log('⚠️ No se pudo acceder a la cámara — usando fondo oscuro')
-    document.body.style.background = 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)'
-  }
+ if (stream) {
+ video.srcObject = stream
+ // iOS requiere llamar play() dentro de un gesto de usuario (ya estamos en el click handler)
+ try { await video.play() } catch (e) { /* autoplay policy — ignorar, el video se inicia igual */ }
+ log('Cámara activada')
+ } else {
+ log('[Aviso] No se pudo acceder a la cámara — usando fondo oscuro')
+ document.body.style.background = 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)'
+ }
 }
 
 // ============================================================
 // DETECCIÓN DE MÓVIL — ajustes automáticos de rendimiento
 // ============================================================
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-  || (navigator.maxTouchPoints > 1 && window.innerWidth < 900)
-const isQuest  = /OculusBrowser|Quest/i.test(navigator.userAgent)
+ || (navigator.maxTouchPoints > 1 && window.innerWidth < 900)
+const isQuest = /OculusBrowser|Quest/i.test(navigator.userAgent)
 
 // WebXR state
-let xrSession    = null
-let xrRefSpace   = null
-let xrSupported  = false
+let xrSession = null
+let xrRefSpace = null
+let xrSupported = false
 
 // Panel 3D en XR
-let xrPanel      = null   // THREE.Mesh plano con la UI
-let xrPanelCtx   = null   // canvas 2D que dibuja el panel
-let xrPanelTex   = null   // THREE.CanvasTexture
-let xrRaycaster  = new THREE.Raycaster()
-let xrControllers = []    // referencias a los controllers del Quest
+let xrPanel = null // THREE.Mesh plano con la UI
+let xrPanelCtx = null // canvas 2D que dibuja el panel
+let xrPanelTex = null // THREE.CanvasTexture
+let xrRaycaster = new THREE.Raycaster()
+let xrControllers = [] // referencias a los controllers del Quest
 
 // Definición de botones del panel XR (posición normalizada 0-1 en el canvas)
 const XR_PANEL_W = 800, XR_PANEL_H = 480
 const XR_BTNS = [
-  { id:'csvBtn',        label:'📂 CSV',          x:0.05, y:0.08, w:0.42, h:0.11, color:'#3b82f6' },
-  { id:'playBtn',       label:'▶ Play',           x:0.53, y:0.08, w:0.42, h:0.11, color:'#10b981', disabled:true },
-  { id:'showAllBtn',    label:'👁 Show All',      x:0.05, y:0.23, w:0.42, h:0.11, color:'#6366f1', disabled:true },
-  { id:'evolutionBtn',  label:'🏆 Best Evol.',    x:0.53, y:0.23, w:0.42, h:0.11, color:'#f59e0b', disabled:true },
-  { id:'convergenceBtn',label:'📈 Convergence',   x:0.05, y:0.38, w:0.42, h:0.11, color:'#3b82f6', disabled:true },
-  { id:'moveBtn',       label:'✋ Mover',          x:0.53, y:0.38, w:0.42, h:0.11, color:'#64748b' },
-  { id:'resetViewBtn',  label:'🎯 Reset',          x:0.05, y:0.53, w:0.42, h:0.11, color:'#64748b' },
-  // Velocidad — botones ½x 1x 2x 4x
-  { id:'__speed_800',   label:'½x',               x:0.05, y:0.68, w:0.20, h:0.09, color:'#374151', isSpeed:true, ms:800 },
-  { id:'__speed_400',   label:'1x',               x:0.28, y:0.68, w:0.20, h:0.09, color:'#3b82f6', isSpeed:true, ms:400 },
-  { id:'__speed_200',   label:'2x',               x:0.51, y:0.68, w:0.20, h:0.09, color:'#374151', isSpeed:true, ms:200 },
-  { id:'__speed_100',   label:'4x',               x:0.74, y:0.68, w:0.20, h:0.09, color:'#374151', isSpeed:true, ms:100 },
-  { id:'__gen',         label:'',                 x:0.05, y:0.80, w:0.90, h:0.07, color:'#1e3a5f', isSlider:true },
-  { id:'__close',       label:'✕ Salir AR',       x:0.25, y:0.89, w:0.50, h:0.09, color:'#dc2626' },
+ { id:'csvBtn', label:'CSV', x:0.05, y:0.16, w:0.42, h:0.11, color:'#3b82f6' },
+ { id:'playBtn', label:'Play', x:0.53, y:0.16, w:0.42, h:0.11, color:'#10b981', disabled:true },
+ { id:'showAllBtn', label:'Show All', x:0.05, y:0.30, w:0.42, h:0.11, color:'#6366f1', disabled:true },
+ { id:'evolutionBtn', label:'Best Evol.', x:0.53, y:0.30, w:0.42, h:0.11, color:'#f59e0b', disabled:true },
+ { id:'convergenceBtn',label:'Convergence', x:0.05, y:0.44, w:0.42, h:0.11, color:'#3b82f6', disabled:true },
+ { id:'moveBtn', label:'Mover', x:0.53, y:0.44, w:0.42, h:0.11, color:'#64748b' },
+ { id:'resetViewBtn', label:'Reset View', x:0.05, y:0.58, w:0.42, h:0.11, color:'#64748b' },
+ // Velocidad — botones ½x 1x 2x 4x
+ { id:'__speed_800', label:'½x', x:0.05, y:0.72, w:0.20, h:0.09, color:'#374151', isSpeed:true, ms:800 },
+ { id:'__speed_400', label:'1x', x:0.28, y:0.72, w:0.20, h:0.09, color:'#3b82f6', isSpeed:true, ms:400 },
+ { id:'__speed_200', label:'2x', x:0.51, y:0.72, w:0.20, h:0.09, color:'#374151', isSpeed:true, ms:200 },
+ { id:'__speed_100', label:'4x', x:0.74, y:0.72, w:0.20, h:0.09, color:'#374151', isSpeed:true, ms:100 },
+ { id:'__gen', label:'', x:0.05, y:0.83, w:0.90, h:0.07, color:'#1e3a5f', isSlider:true },
+ { id:'__close', label:'Salir AR', x:0.25, y:0.92, w:0.50, h:0.09, color:'#dc2626' },
 ]
 
 // ============================================================
 // THREE.JS
 // ============================================================
 function initThree(xrMode = false) {
-  scene = new THREE.Scene()
+ scene = new THREE.Scene()
 
-  if (xrMode) {
-    // Para Quest XR: renderer sin canvas fijo — Three.js crea el suyo propio
-    renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true })
-    renderer.setPixelRatio(1)
-    renderer.setSize(window.innerWidth, window.innerHeight)
-    // Insertar el canvas del renderer en el DOM
-    renderer.domElement.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:1'
-    document.body.appendChild(renderer.domElement)
-  } else {
-    const canvas = document.getElementById('threeCanvas')
-    renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: !isMobile })
-    renderer.setPixelRatio(isMobile ? Math.min(window.devicePixelRatio, 1.5) : window.devicePixelRatio)
-    renderer.setSize(window.innerWidth, window.innerHeight)
-  }
+ if (xrMode) {
+ // Para Quest XR: renderer sin canvas fijo — Three.js crea el suyo propio
+ renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+ renderer.setSize(window.innerWidth, window.innerHeight)
+ // Insertar el canvas del renderer en el DOM
+ renderer.domElement.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:1'
+ document.body.appendChild(renderer.domElement)
+ } else {
+ const canvas = document.getElementById('threeCanvas')
+ renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
+ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+ renderer.setSize(window.innerWidth, window.innerHeight)
+ }
 
-  renderer.setClearColor(0x000000, 0)
-  renderer.xr.enabled = true
+ renderer.setClearColor(0x000000, 0)
+ renderer.xr.enabled = true
 
-  camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.01, 200)
-  camera.position.set(0, 0, 4)
+ camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.01, 200)
+ camera.position.set(0, 0, 4)
 
-  scene.add(new THREE.AmbientLight(0xffffff, (isMobile || xrMode) ? 0.75 : 0.45))
-  const key = new THREE.DirectionalLight(0xffffff, 0.9)
-  key.position.set(5, 8, 5); scene.add(key)
-  if (!isMobile && !xrMode) {
-    const fill = new THREE.DirectionalLight(0x88aaff, 0.4)
-    fill.position.set(-5, 2, -3); scene.add(fill)
-    const rim = new THREE.DirectionalLight(0xffddaa, 0.3)
-    rim.position.set(0, -5, -5); scene.add(rim)
-  }
+ scene.add(new THREE.AmbientLight(0xffffff, 0.45))
+ const key = new THREE.DirectionalLight(0xffffff, 0.9)
+ key.position.set(5, 8, 5); scene.add(key)
+ const fill = new THREE.DirectionalLight(0x88aaff, 0.4)
+ fill.position.set(-5, 2, -3); scene.add(fill)
+ const rim = new THREE.DirectionalLight(0xffddaa, 0.3)
+ rim.position.set(0, -5, -5); scene.add(rim)
 
-  pointsGroup = new THREE.Group()
-  scene.add(pointsGroup)
+ pointsGroup = new THREE.Group()
+ scene.add(pointsGroup)
 
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight
-    camera.updateProjectionMatrix()
-    if (!xrSession) renderer.setSize(window.innerWidth, window.innerHeight)
-  })
+ window.addEventListener('resize', () => {
+ camera.aspect = window.innerWidth / window.innerHeight
+ camera.updateProjectionMatrix()
+ if (!xrSession) renderer.setSize(window.innerWidth, window.innerHeight)
+ })
 
-  const floatDelta = isMobile ? 0.022 : 0.016
+ const floatDelta = isMobile ? 0.022 : 0.016
 
-  renderer.setAnimationLoop(() => {
-    if (!xrSession) {
-      pointsGroup.position.set(cloudPosX, cloudPosY, 0)
-      pointsGroup.scale.setScalar(cloudScale)
-    }
+ renderer.setAnimationLoop(() => {
+ if (!xrSession) {
+ pointsGroup.position.set(cloudPosX, cloudPosY, 0)
+ pointsGroup.scale.setScalar(cloudScale)
+ }
 
-    if (floatEnabled && pointMeshes.length > 0) {
-      floatTime += floatDelta
-      const AMP  = 0.022
-      const FREQ = isMobile ? 0.5 : 0.8
-      pointMeshes.forEach((mesh, i) => {
-        const b = pointBasePosns[i]
-        if (!b) return
-        mesh.position.x = b.x + Math.sin(floatTime * FREQ + b.ox) * AMP
-        mesh.position.y = b.y + Math.sin(floatTime * FREQ + b.oy) * AMP * 0.8
-        mesh.position.z = b.z + Math.sin(floatTime * FREQ + b.oz) * AMP * 0.6
-      })
-    }
+ if (floatEnabled && pointMeshes.length > 0) {
+ floatTime += floatDelta
+ const AMP = 0.022
+ const FREQ = isMobile ? 0.5 : 0.8
+ pointMeshes.forEach((mesh, i) => {
+ const b = pointBasePosns[i]
+ if (!b) return
+ mesh.position.x = b.x + Math.sin(floatTime * FREQ + b.ox) * AMP
+ mesh.position.y = b.y + Math.sin(floatTime * FREQ + b.oy) * AMP * 0.8
+ mesh.position.z = b.z + Math.sin(floatTime * FREQ + b.oz) * AMP * 0.6
+ })
+ }
 
-    // Panel expresión XR siempre mira a la cámara (billboard)
-    if (xrExprPanel) xrExprPanel.lookAt(camera.position)
+ // Panel expresión XR siempre mira a la cámara (billboard)
+ if (xrExprPanel) xrExprPanel.lookAt(camera.position)
 
-    // Actualizar controllers XR cada frame (drag, puntito, escala)
-    if (xrSession) updateXRControllers()
+ // Actualizar controllers XR cada frame (drag, puntito, escala)
+ if (xrSession) updateXRControllers()
 
-    // Refrescar panel XR (solo cuando está en sesión activa)
-    if (xrPanel && xrSession) drawXRPanel()
+ // Refrescar panel XR (solo cuando está en sesión activa)
+ if (xrPanel && xrSession) drawXRPanel()
 
-    renderer.render(scene, camera)
-  })
+ renderer.render(scene, camera)
+ })
 
-  log(`✅ Three.js listo (${xrMode ? '🥽 Quest XR' : isQuest ? '🥽 Quest 2D' : isMobile ? '📱 móvil' : '🖥️ desktop'})`)
+ log(` Three.js listo (${xrMode ? ' Quest XR' : isQuest ? ' Quest 2D' : isMobile ? ' móvil' : ' desktop'})`)
 }
 
 // ============================================================
@@ -590,138 +587,146 @@ function initThree(xrMode = false) {
 
 // ── Dibuja el panel en el canvas 2D ──
 function drawXRPanel() {
-  if (!xrPanelCtx) return
-  const ctx = xrPanelCtx
-  const W = XR_PANEL_W, H = XR_PANEL_H
+ if (!xrPanelCtx) return
+ const ctx = xrPanelCtx
+ const W = XR_PANEL_W, H = XR_PANEL_H
 
-  // Fondo
-  ctx.clearRect(0, 0, W, H)
-  const bg = ctx.createRoundRect ? null : null
-  ctx.fillStyle = 'rgba(10,15,40,0.92)'
-  roundRect(ctx, 0, 0, W, H, 24)
-  ctx.fill()
+ // Fondo
+ ctx.clearRect(0, 0, W, H)
+ const bg = ctx.createRoundRect ? null : null
+ ctx.fillStyle = 'rgba(10,15,40,0.92)'
+ roundRect(ctx, 0, 0, W, H, 24)
+ ctx.fill()
 
-  // Borde
-  ctx.strokeStyle = 'rgba(99,102,241,0.6)'
-  ctx.lineWidth = 3
-  roundRect(ctx, 0, 0, W, H, 24)
-  ctx.stroke()
+ // Borde
+ ctx.strokeStyle = 'rgba(99,102,241,0.6)'
+ ctx.lineWidth = 3
+ roundRect(ctx, 0, 0, W, H, 24)
+ ctx.stroke()
 
-  // Título
-  ctx.fillStyle = '#c7d2fe'
-  ctx.font = 'bold 26px Arial'
-  ctx.textAlign = 'center'
-  ctx.fillText('🧬 TSP AR Visualizer', W / 2, 44)
+ // Título
+ ctx.fillStyle = '#c7d2fe'
+ ctx.font = 'bold 22px Arial'
+ ctx.textAlign = 'center'
+ ctx.fillText('TSP AR Visualizer', W / 2, 34)
 
-  // Info generación
-  ctx.font = '18px Arial'
-  ctx.fillStyle = '#94a3b8'
-  ctx.fillText(`Gen: ${currentGeneration} / ${maxGeneration || '—'}   Puntos: ${pointMeshes.length}`, W / 2, 68)
+ // Info generación
+ ctx.font = '16px Arial'
+ ctx.fillStyle = '#94a3b8'
+ ctx.fillText(`Gen: ${currentGeneration} / ${maxGeneration || '-'}   Puntos: ${pointMeshes.length}`, W / 2, 56)
 
-  // Botones
-  XR_BTNS.forEach(btn => {
-    const x = btn.x * W, y = btn.y * H
-    const w = btn.w * W, h = btn.h * H
+ // Separador header / botones
+ ctx.strokeStyle = 'rgba(99,102,241,0.4)'
+ ctx.lineWidth = 1
+ ctx.beginPath()
+ ctx.moveTo(20, 68)
+ ctx.lineTo(W - 20, 68)
+ ctx.stroke()
 
-    if (btn.isSlider) {
-      ctx.fillStyle = '#1e3a5f'
-      roundRect(ctx, x, y, w, h, 8); ctx.fill()
-      if (maxGeneration > 0) {
-        const prog = (currentGeneration - 1) / (maxGeneration - 1 || 1)
-        ctx.fillStyle = '#3b82f6'
-        roundRect(ctx, x, y, w * prog, h, 8); ctx.fill()
-      }
-      ctx.fillStyle = '#fff'
-      ctx.font = '16px Arial'
-      ctx.textAlign = 'center'
-      ctx.fillText(`Generación: ${currentGeneration}`, x + w / 2, y + h / 2 + 6)
-      return
-    }
+ // Botones
+ XR_BTNS.forEach(btn => {
+ const x = btn.x * W, y = btn.y * H
+ const w = btn.w * W, h = btn.h * H
 
-    if (btn.isSpeed) {
-      const isActive = animSpeed === btn.ms
-      ctx.fillStyle = isActive ? '#6366f1' : '#374151'
-      roundRect(ctx, x, y, w, h, 8); ctx.fill()
-      ctx.fillStyle = isActive ? '#fff' : '#94a3b8'
-      ctx.font = `bold 18px Arial`
-      ctx.textAlign = 'center'
-      ctx.fillText(btn.label, x + w / 2, y + h / 2 + 6)
-      return
-    }
+ if (btn.isSlider) {
+ ctx.fillStyle = '#1e3a5f'
+ roundRect(ctx, x, y, w, h, 8); ctx.fill()
+ if (maxGeneration > 0) {
+ const prog = (currentGeneration - 1) / (maxGeneration - 1 || 1)
+ ctx.fillStyle = '#3b82f6'
+ roundRect(ctx, x, y, w * prog, h, 8); ctx.fill()
+ }
+ ctx.fillStyle = '#fff'
+ ctx.font = '16px Arial'
+ ctx.textAlign = 'center'
+ ctx.fillText(`Generación: ${currentGeneration}`, x + w / 2, y + h / 2 + 6)
+ return
+ }
 
-    const isDisabled = btn.disabled && parsedData.length === 0
-    const isActive   = (btn.id === 'moveBtn'      && moveMode)   ||
-                       (btn.id === 'evolutionBtn'  && tourRunning)
+ if (btn.isSpeed) {
+ const isActive = animSpeed === btn.ms
+ ctx.fillStyle = isActive ? '#6366f1' : '#374151'
+ roundRect(ctx, x, y, w, h, 8); ctx.fill()
+ ctx.fillStyle = isActive ? '#fff' : '#94a3b8'
+ ctx.font = `bold 18px Arial`
+ ctx.textAlign = 'center'
+ ctx.fillText(btn.label, x + w / 2, y + h / 2 + 6)
+ return
+ }
 
-    ctx.fillStyle = isDisabled ? '#374151' : isActive ? '#ec4899' : btn.color
-    ctx.globalAlpha = isDisabled ? 0.45 : 1.0
-    roundRect(ctx, x, y, w, h, 12); ctx.fill()
-    ctx.globalAlpha = 1.0
+ const isDisabled = btn.disabled && parsedData.length === 0
+ const isActive = (btn.id === 'moveBtn' && moveMode) ||
+ (btn.id === 'evolutionBtn' && tourRunning)
 
-    ctx.fillStyle = '#ffffff'
-    ctx.font = `bold 20px Arial`
-    ctx.textAlign = 'center'
-    ctx.fillText(btn.label, x + w / 2, y + h / 2 + 7)
-  })
+ ctx.fillStyle = isDisabled ? '#374151' : isActive ? '#ec4899' : btn.color
+ ctx.globalAlpha = isDisabled ? 0.45 : 1.0
+ roundRect(ctx, x, y, w, h, 12); ctx.fill()
+ ctx.globalAlpha = 1.0
 
-  if (xrPanelTex) xrPanelTex.needsUpdate = true
+ ctx.fillStyle = '#ffffff'
+ ctx.font = `bold 20px Arial`
+ ctx.textAlign = 'center'
+ ctx.fillText(btn.label, x + w / 2, y + h / 2 + 7)
+ })
+
+ if (xrPanelTex) xrPanelTex.needsUpdate = true
 }
 
 function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath()
-  ctx.moveTo(x + r, y)
-  ctx.lineTo(x + w - r, y)
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r)
-  ctx.lineTo(x + w, y + h - r)
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
-  ctx.lineTo(x + r, y + h)
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r)
-  ctx.lineTo(x, y + r)
-  ctx.quadraticCurveTo(x, y, x + r, y)
-  ctx.closePath()
+ ctx.beginPath()
+ ctx.moveTo(x + r, y)
+ ctx.lineTo(x + w - r, y)
+ ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+ ctx.lineTo(x + w, y + h - r)
+ ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+ ctx.lineTo(x + r, y + h)
+ ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+ ctx.lineTo(x, y + r)
+ ctx.quadraticCurveTo(x, y, x + r, y)
+ ctx.closePath()
 }
 
 // ── Crea el plano 3D del panel ──
 function createXRPanel() {
-  const canvas = document.createElement('canvas')
-  canvas.width  = XR_PANEL_W
-  canvas.height = XR_PANEL_H
-  xrPanelCtx = canvas.getContext('2d')
+ const canvas = document.createElement('canvas')
+ canvas.width = XR_PANEL_W
+ canvas.height = XR_PANEL_H
+ xrPanelCtx = canvas.getContext('2d')
 
-  xrPanelTex = new THREE.CanvasTexture(canvas)
-  const geo  = new THREE.PlaneGeometry(0.8, 0.52)  // 80cm × 52cm en el mundo
-  const mat  = new THREE.MeshBasicMaterial({ map: xrPanelTex, transparent: true, side: THREE.DoubleSide })
-  xrPanel    = new THREE.Mesh(geo, mat)
+ xrPanelTex = new THREE.CanvasTexture(canvas)
+ const geo = new THREE.PlaneGeometry(0.8, 0.52) // 80cm × 52cm en el mundo
+ const mat = new THREE.MeshBasicMaterial({ map: xrPanelTex, transparent: true, side: THREE.DoubleSide })
+ xrPanel = new THREE.Mesh(geo, mat)
 
-  // Posición: a la derecha del usuario, a altura de ojos, 1m de distancia
-  xrPanel.position.set(0.55, 0.0, -1.0)
-  xrPanel.rotation.y = -0.3   // girado levemente hacia el centro
-  scene.add(xrPanel)
-  drawXRPanel()
+ // Posición: a la derecha del usuario, a altura de ojos, 1m de distancia
+ xrPanel.position.set(0.55, 0.0, -1.0)
+ xrPanel.rotation.y = -0.3 // girado levemente hacia el centro
+ scene.add(xrPanel)
+ drawXRPanel()
 }
 
 // ── Detecta qué botón fue apuntado por el controller ──
 function handleXRSelect(ctrl) {
-  const { origin, direction } = getControllerRay(ctrl)
-  xrRaycaster.set(origin, direction)
+ const { origin, direction } = getControllerRay(ctrl)
+ xrRaycaster.set(origin, direction)
 
-  // Raycast solo al panel UI — esferas se manejan con botón A
-  if (xrPanel) {
-    const panelHits = xrRaycaster.intersectObject(xrPanel)
-    if (panelHits.length) {
-      const uv = panelHits[0].uv
-      const px = uv.x * XR_PANEL_W
-      const py = (1 - uv.y) * XR_PANEL_H
-      for (const btn of XR_BTNS) {
-        const x = btn.x * XR_PANEL_W, y = btn.y * XR_PANEL_H
-        const w = btn.w * XR_PANEL_W, h = btn.h * XR_PANEL_H
-        if (px >= x && px <= x + w && py >= y && py <= y + h) {
-          handleXRBtnClick(btn.id)
-          return
-        }
-      }
-    }
-  }
+ // Raycast solo al panel UI — esferas se manejan con botón A
+ if (xrPanel) {
+ const panelHits = xrRaycaster.intersectObject(xrPanel)
+ if (panelHits.length) {
+ const uv = panelHits[0].uv
+ const px = uv.x * XR_PANEL_W
+ const py = (1 - uv.y) * XR_PANEL_H
+ for (const btn of XR_BTNS) {
+ const x = btn.x * XR_PANEL_W, y = btn.y * XR_PANEL_H
+ const w = btn.w * XR_PANEL_W, h = btn.h * XR_PANEL_H
+ if (px >= x && px <= x + w && py >= y && py <= y + h) {
+ handleXRBtnClick(btn.id)
+ return
+ }
+ }
+ }
+ }
 }
 
 // Panel 3D flotante para expresión en AR
@@ -729,275 +734,275 @@ let xrExprPanel = null
 let xrExprTimeout = null
 
 function showExpressionXR(userData, point) {
-  // Limpiar anterior
-  if (xrExprPanel) { scene.remove(xrExprPanel); xrExprPanel = null }
-  clearTimeout(xrExprTimeout)
+ // Limpiar anterior
+ if (xrExprPanel) { scene.remove(xrExprPanel); xrExprPanel = null }
+ clearTimeout(xrExprTimeout)
 
-  const expr  = typeof userData === 'string' ? userData : (userData.expression || 'Sin expresión')
-  const gen   = typeof userData === 'object' ? userData.generation  : null
-  const train = typeof userData === 'object' ? userData.train       : null
-  const best  = typeof userData === 'object' ? userData.isBest      : false
+ const expr = typeof userData === 'string' ? userData : (userData.expression || 'Sin expresión')
+ const gen = typeof userData === 'object' ? userData.generation : null
+ const train = typeof userData === 'object' ? userData.train : null
+ const best = typeof userData === 'object' ? userData.isBest : false
 
-  const W = 620, H = best || (train !== null) ? 160 : 120
-  const c   = document.createElement('canvas')
-  c.width = W; c.height = H
-  const ctx = c.getContext('2d')
+ const W = 620, H = best || (train !== null) ? 160 : 120
+ const c = document.createElement('canvas')
+ c.width = W; c.height = H
+ const ctx = c.getContext('2d')
 
-  // Fondo
-  ctx.fillStyle = 'rgba(0,0,0,0.88)'
-  roundRect(ctx, 0, 0, W, H, 16); ctx.fill()
-  ctx.strokeStyle = best ? '#34d399' : '#6366f1'; ctx.lineWidth = 2
-  roundRect(ctx, 0, 0, W, H, 16); ctx.stroke()
+ // Fondo
+ ctx.fillStyle = 'rgba(0,0,0,0.88)'
+ roundRect(ctx, 0, 0, W, H, 16); ctx.fill()
+ ctx.strokeStyle = best ? '#34d399' : '#6366f1'; ctx.lineWidth = 2
+ roundRect(ctx, 0, 0, W, H, 16); ctx.stroke()
 
-  // Etiqueta
-  ctx.fillStyle = '#818cf8'
-  ctx.font = 'bold 13px Arial'
-  ctx.textAlign = 'left'
-  ctx.fillText('🔬 Expresión simbólica', 18, 22)
-  if (best) {
-    ctx.fillStyle = '#34d399'; ctx.textAlign = 'right'
-    ctx.fillText('🏆 IsBest', W - 18, 22)
-  }
+ // Etiqueta
+ ctx.fillStyle = '#818cf8'
+ ctx.font = 'bold 13px Arial'
+ ctx.textAlign = 'left'
+ ctx.fillText('Expresión simbólica', 18, 22)
+ if (best) {
+ ctx.fillStyle = '#34d399'; ctx.textAlign = 'right'
+ ctx.fillText('IsBest', W - 18, 22)
+ }
 
-  // Expresión — font monospace, wrap si es largo
-  ctx.fillStyle = '#ffffff'
-  ctx.textAlign = 'center'
-  const fontSize = expr.length > 70 ? 13 : expr.length > 45 ? 15 : 18
-  ctx.font = `${fontSize}px monospace`
-  const maxW = W - 30
-  const words = expr.split(' ')
-  let line = '', lines = []
-  for (const w of words) {
-    const test = line ? line + ' ' + w : w
-    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w }
-    else line = test
-  }
-  lines.push(line)
-  const lineH = fontSize + 4
-  const exprY = (train !== null || gen !== null) ? 44 : H / 2 - (lines.length - 1) * lineH / 2
-  lines.forEach((l, i) => ctx.fillText(l, W / 2, exprY + i * lineH))
+ // Expresión — font monospace, wrap si es largo
+ ctx.fillStyle = '#ffffff'
+ ctx.textAlign = 'center'
+ const fontSize = expr.length > 70 ? 13 : expr.length > 45 ? 15 : 18
+ ctx.font = `${fontSize}px monospace`
+ const maxW = W - 30
+ const words = expr.split(' ')
+ let line = '', lines = []
+ for (const w of words) {
+ const test = line ? line + ' ' + w : w
+ if (ctx.measureText(test).width >maxW && line) { lines.push(line); line = w }
+ else line = test
+ }
+ lines.push(line)
+ const lineH = fontSize + 4
+ const exprY = (train !== null || gen !== null) ? 44 : H / 2 - (lines.length - 1) * lineH / 2
+ lines.forEach((l, i) =>ctx.fillText(l, W / 2, exprY + i * lineH))
 
-  // Generación + fitness
-  if (gen !== null || train !== null) {
-    const infoY = exprY + lines.length * lineH + 12
-    ctx.font = '14px Arial'; ctx.textAlign = 'center'
-    let info = ''
-    if (gen !== null && gen > 0) info += `📊 Gen: ${gen}`
-    if (train !== null && !isNaN(train)) {
-      if (info) info += '   '
-      info += `🎯 Fitness: ${train.toExponential(4)}`
-    }
-    ctx.fillStyle = '#94a3b8'
-    ctx.fillText(info, W / 2, infoY)
-  }
+ // Generación + fitness
+ if (gen !== null || train !== null) {
+ const infoY = exprY + lines.length * lineH + 12
+ ctx.font = '14px Arial'; ctx.textAlign = 'center'
+ let info = ''
+ if (gen !== null && gen > 0) info += `Gen: ${gen}`
+ if (train !== null && !isNaN(train)) {
+ if (info) info += ' '
+ info += `Fitness: ${train.toExponential(4)}`
+ }
+ ctx.fillStyle = '#94a3b8'
+ ctx.fillText(info, W / 2, infoY)
+ }
 
-  const tex = new THREE.CanvasTexture(c)
-  const geo = new THREE.PlaneGeometry(0.52, H / W * 0.52)
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthTest: false })
-  xrExprPanel = new THREE.Mesh(geo, mat)
+ const tex = new THREE.CanvasTexture(c)
+ const geo = new THREE.PlaneGeometry(0.52, H / W * 0.52)
+ const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthTest: false })
+ xrExprPanel = new THREE.Mesh(geo, mat)
 
-  // Posicionar justo encima del punto tocado
-  xrExprPanel.position.copy(point).add(new THREE.Vector3(0, 0.14, 0))
-  xrExprPanel.lookAt(camera.position)
-  scene.add(xrExprPanel)
+ // Posicionar justo encima del punto tocado
+ xrExprPanel.position.copy(point).add(new THREE.Vector3(0, 0.14, 0))
+ xrExprPanel.lookAt(camera.position)
+ scene.add(xrExprPanel)
 
-  xrExprTimeout = setTimeout(() => {
-    if (xrExprPanel) { scene.remove(xrExprPanel); xrExprPanel = null }
-  }, 5000)
+ xrExprTimeout = setTimeout(() => {
+ if (xrExprPanel) { scene.remove(xrExprPanel); xrExprPanel = null }
+ }, 5000)
 }
 
 function handleXRBtnClick(id) {
-  if (id === '__close') { if (xrSession) xrSession.end(); return }
-  if (id === '__gen')   return
+ if (id === '__close') { if (xrSession) xrSession.end(); return }
+ if (id === '__gen') return
 
-  // Botones de velocidad
-  if (id.startsWith('__speed_')) {
-    const ms = parseInt(id.replace('__speed_', ''))
-    animSpeed = ms
-    // Actualizar selector DOM si existe
-    const sel = document.getElementById('speedSelect')
-    if (sel) sel.value = ms
-    // Reiniciar intervalo si está corriendo
-    if (isPlaying) {
-      clearInterval(animationInterval)
-      animationInterval = setInterval(() => {
-        showPointsUpToGeneration(currentGeneration)
-        document.getElementById('generationSlider').value = currentGeneration
-        document.getElementById('generationValue').value  = currentGeneration
-        const convPanel = document.getElementById('convergencePanel')
-        if (convPanel.classList.contains('visible') && convPts.length >= 2) {
-          drawConvergenceChart(convPts, currentGeneration)
-        }
-        currentGeneration++
-        if (currentGeneration > maxGeneration) stopAnimation()
-      }, animSpeed)
-    }
-    drawXRPanel()
-    return
-  }
+ // Botones de velocidad
+ if (id.startsWith('__speed_')) {
+ const ms = parseInt(id.replace('__speed_', ''))
+ animSpeed = ms
+ // Actualizar selector DOM si existe
+ const sel = document.getElementById('speedSelect')
+ if (sel) sel.value = ms
+ // Reiniciar intervalo si está corriendo
+ if (isPlaying) {
+ clearInterval(animationInterval)
+ animationInterval = setInterval(() => {
+ showPointsUpToGeneration(currentGeneration)
+ document.getElementById('generationSlider').value = currentGeneration
+ document.getElementById('generationValue').value = currentGeneration
+ const convPanel = document.getElementById('convergencePanel')
+ if (convPanel.classList.contains('visible') && convPts.length >= 2) {
+ drawConvergenceChart(convPts, currentGeneration)
+ }
+ currentGeneration++
+ if (currentGeneration >maxGeneration) stopAnimation()
+ }, animSpeed)
+ }
+ drawXRPanel()
+ return
+ }
 
-  if (id === 'csvBtn') { showXRCsvInput(); return }
+ if (id === 'csvBtn') { showXRCsvInput(); return }
 
-  // Convergencia en AR: mostrar como panel 3D flotante
-  if (id === 'convergenceBtn') { showXRConvergence(); return }
+ // Convergencia en AR: mostrar como panel 3D flotante
+ if (id === 'convergenceBtn') { showXRConvergence(); return }
 
-  const domBtn = document.getElementById(id)
-  if (domBtn && !domBtn.disabled) {
-    flashXRBtn(id)
-    domBtn.click()
-    setTimeout(() => drawXRPanel(), 250)
-  }
+ const domBtn = document.getElementById(id)
+ if (domBtn && !domBtn.disabled) {
+ flashXRBtn(id)
+ domBtn.click()
+ setTimeout(() =>drawXRPanel(), 250)
+ }
 }
 
 // ── Convergencia como panel 3D en AR ──
 let xrConvPanel = null
 
 function showXRConvergence() {
-  // Toggle
-  if (xrConvPanel) { scene.remove(xrConvPanel); xrConvPanel = null; return }
+ // Toggle
+ if (xrConvPanel) { scene.remove(xrConvPanel); xrConvPanel = null; return }
 
-  if (!parsedData.length) return
+ if (!parsedData.length) return
 
-  // Usar convPts global si ya están calculados, si no calcular
-  const pts = convPts.length >= 2 ? convPts : parsedData
-    .filter(d => d.isBest && d.train !== null && !isNaN(d.train) && d.generation > 0)
-    .sort((a, b) => a.generation - b.generation)
-  if (pts.length < 2) return
+ // Usar convPts global si ya están calculados, si no calcular
+ const pts = convPts.length >= 2 ? convPts : parsedData
+ .filter(d =>d.isBest && d.train !== null && !isNaN(d.train) && d.generation > 0)
+ .sort((a, b) =>a.generation - b.generation)
+ if (pts.length < 2) return
 
-  // Dibujar la gráfica en un canvas offscreen
-  const W = 600, H = 380
-  const c   = document.createElement('canvas')
-  c.width = W; c.height = H
+ // Dibujar la gráfica en un canvas offscreen
+ const W = 600, H = 380
+ const c = document.createElement('canvas')
+ c.width = W; c.height = H
 
-  // Fondo oscuro
-  const ctx = c.getContext('2d')
-  ctx.fillStyle = 'rgba(10,15,40,0.95)'
-  roundRect(ctx, 0, 0, W, H, 16); ctx.fill()
-  ctx.strokeStyle = 'rgba(99,102,241,0.6)'; ctx.lineWidth = 2
-  roundRect(ctx, 0, 0, W, H, 16); ctx.stroke()
+ // Fondo oscuro
+ const ctx = c.getContext('2d')
+ ctx.fillStyle = 'rgba(10,15,40,0.95)'
+ roundRect(ctx, 0, 0, W, H, 16); ctx.fill()
+ ctx.strokeStyle = 'rgba(99,102,241,0.6)'; ctx.lineWidth = 2
+ roundRect(ctx, 0, 0, W, H, 16); ctx.stroke()
 
-  // Título
-  ctx.fillStyle = '#c7d2fe'; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center'
-  ctx.fillText('📈 Convergencia — Train vs Generación', W / 2, 26)
+ // Título
+ ctx.fillStyle = '#c7d2fe'; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center'
+ ctx.fillText('Convergencia — Train vs Generación', W / 2, 26)
 
-  // Redibujar la gráfica en este canvas usando la misma lógica
-  const PAD = { top: 36, right: 20, bottom: 40, left: 60 }
-  const cW  = W - PAD.left - PAD.right
-  const cH  = H - PAD.top  - PAD.bottom
-  const genMin = pts[0].generation, genMax = pts[pts.length-1].generation
-  const tVals  = pts.map(d => d.train)
-  const tMin   = Math.min(...tVals), tMax = Math.max(...tVals)
-  const tPad   = (tMax - tMin) * 0.08 || 0.1
-  const xOf = g => PAD.left + ((g - genMin) / (genMax - genMin || 1)) * cW
-  const yOf = t => PAD.top  + (1 - (t - (tMin-tPad)) / ((tMax+tPad)-(tMin-tPad))) * cH
+ // Redibujar la gráfica en este canvas usando la misma lógica
+ const PAD = { top: 36, right: 20, bottom: 40, left: 60 }
+ const cW = W - PAD.left - PAD.right
+ const cH = H - PAD.top - PAD.bottom
+ const genMin = pts[0].generation, genMax = pts[pts.length-1].generation
+ const tVals = pts.map(d =>d.train)
+ const tMin = Math.min(...tVals), tMax = Math.max(...tVals)
+ const tPad = (tMax - tMin) * 0.08 || 0.1
+ const xOf = g =>PAD.left + ((g - genMin) / (genMax - genMin || 1)) * cW
+ const yOf = t =>PAD.top + (1 - (t - (tMin-tPad)) / ((tMax+tPad)-(tMin-tPad))) * cH
 
-  // Grid
-  ctx.strokeStyle = 'rgba(99,102,241,0.12)'; ctx.lineWidth = 1
-  for (let i=0; i<=5; i++) {
-    const y = PAD.top + (i/5)*cH
-    ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(PAD.left+cW,y); ctx.stroke()
-  }
+ // Grid
+ ctx.strokeStyle = 'rgba(99,102,241,0.12)'; ctx.lineWidth = 1
+ for (let i=0; i<=5; i++) {
+ const y = PAD.top + (i/5)*cH
+ ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(PAD.left+cW,y); ctx.stroke()
+ }
 
-  // Área
-  const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top+cH)
-  grad.addColorStop(0, 'rgba(99,102,241,0.35)'); grad.addColorStop(1, 'rgba(99,102,241,0.02)')
-  ctx.beginPath()
-  ctx.moveTo(xOf(pts[0].generation), PAD.top+cH)
-  pts.forEach(d => ctx.lineTo(xOf(d.generation), yOf(d.train)))
-  ctx.lineTo(xOf(pts[pts.length-1].generation), PAD.top+cH)
-  ctx.closePath(); ctx.fillStyle = grad; ctx.fill()
+ // Área
+ const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top+cH)
+ grad.addColorStop(0, 'rgba(99,102,241,0.35)'); grad.addColorStop(1, 'rgba(99,102,241,0.02)')
+ ctx.beginPath()
+ ctx.moveTo(xOf(pts[0].generation), PAD.top+cH)
+ pts.forEach(d =>ctx.lineTo(xOf(d.generation), yOf(d.train)))
+ ctx.lineTo(xOf(pts[pts.length-1].generation), PAD.top+cH)
+ ctx.closePath(); ctx.fillStyle = grad; ctx.fill()
 
-  // Línea
-  ctx.beginPath(); ctx.moveTo(xOf(pts[0].generation), yOf(pts[0].train))
-  pts.forEach(d => ctx.lineTo(xOf(d.generation), yOf(d.train)))
-  ctx.strokeStyle = '#818cf8'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke()
+ // Línea
+ ctx.beginPath(); ctx.moveTo(xOf(pts[0].generation), yOf(pts[0].train))
+ pts.forEach(d =>ctx.lineTo(xOf(d.generation), yOf(d.train)))
+ ctx.strokeStyle = '#818cf8'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke()
 
-  // Último punto resaltado
-  const last = pts[pts.length-1]
-  ctx.beginPath(); ctx.arc(xOf(last.generation), yOf(last.train), 5, 0, Math.PI*2)
-  ctx.fillStyle = '#34d399'; ctx.fill()
-  ctx.fillStyle = '#34d399'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'left'
-  ctx.fillText(`Best: ${last.train.toExponential(3)} @ gen ${last.generation}`, PAD.left+4, PAD.top+14)
+ // Último punto resaltado
+ const last = pts[pts.length-1]
+ ctx.beginPath(); ctx.arc(xOf(last.generation), yOf(last.train), 5, 0, Math.PI*2)
+ ctx.fillStyle = '#34d399'; ctx.fill()
+ ctx.fillStyle = '#34d399'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'left'
+ ctx.fillText(`Best: ${last.train.toExponential(3)} @ gen ${last.generation}`, PAD.left+4, PAD.top+14)
 
-  // Ejes labels
-  ctx.fillStyle = '#94a3b8'; ctx.font = '11px Arial'; ctx.textAlign = 'center'
-  ctx.fillText('Generación', PAD.left + cW/2, H-6)
-  ctx.save(); ctx.translate(13, PAD.top+cH/2); ctx.rotate(-Math.PI/2)
-  ctx.fillText('Train', 0, 0); ctx.restore()
+ // Ejes labels
+ ctx.fillStyle = '#94a3b8'; ctx.font = '11px Arial'; ctx.textAlign = 'center'
+ ctx.fillText('Generación', PAD.left + cW/2, H-6)
+ ctx.save(); ctx.translate(13, PAD.top+cH/2); ctx.rotate(-Math.PI/2)
+ ctx.fillText('Train', 0, 0); ctx.restore()
 
-  // Crear mesh 3D
-  const tex = new THREE.CanvasTexture(c)
-  const geo = new THREE.PlaneGeometry(0.9, 0.57)
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
-  xrConvPanel = new THREE.Mesh(geo, mat)
-  // Posición: frente al usuario, centrado, a 1.3m
-  xrConvPanel.position.set(0, 0.6, -1.3)
-  scene.add(xrConvPanel)
+ // Crear mesh 3D
+ const tex = new THREE.CanvasTexture(c)
+ const geo = new THREE.PlaneGeometry(0.9, 0.57)
+ const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
+ xrConvPanel = new THREE.Mesh(geo, mat)
+ // Posición: frente al usuario, centrado, a 1.3m
+ xrConvPanel.position.set(0, 0.6, -1.3)
+ scene.add(xrConvPanel)
 }
 
 // ── Panel secundario: cargar CSV por URL en XR ──
 let xrCsvPanel = null
 
 function showXRCsvInput() {
-  // Si ya existe, lo quitamos (toggle)
-  if (xrCsvPanel) {
-    scene.remove(xrCsvPanel)
-    xrCsvPanel = null
-    return
-  }
+ // Si ya existe, lo quitamos (toggle)
+ if (xrCsvPanel) {
+ scene.remove(xrCsvPanel)
+ xrCsvPanel = null
+ return
+ }
 
-  // Canvas con instrucciones y campo de URL
-  const c = document.createElement('canvas')
-  c.width = 700; c.height = 300
-  const ctx = c.getContext('2d')
+ // Canvas con instrucciones y campo de URL
+ const c = document.createElement('canvas')
+ c.width = 700; c.height = 300
+ const ctx = c.getContext('2d')
 
-  ctx.fillStyle = 'rgba(10,15,40,0.97)'
-  roundRect(ctx, 0, 0, 700, 300, 20); ctx.fill()
-  ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 3
-  roundRect(ctx, 0, 0, 700, 300, 20); ctx.stroke()
+ ctx.fillStyle = 'rgba(10,15,40,0.97)'
+ roundRect(ctx, 0, 0, 700, 300, 20); ctx.fill()
+ ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 3
+ roundRect(ctx, 0, 0, 700, 300, 20); ctx.stroke()
 
-  ctx.fillStyle = '#fbbf24'
-  ctx.font = 'bold 28px Arial'
-  ctx.textAlign = 'center'
-  ctx.fillText('📂 Cargar CSV', 350, 48)
+ ctx.fillStyle = '#fbbf24'
+ ctx.font = 'bold 28px Arial'
+ ctx.textAlign = 'center'
+ ctx.fillText('Cargar CSV', 350, 48)
 
-  ctx.fillStyle = '#94a3b8'
-  ctx.font = '20px Arial'
-  ctx.fillText('Sal del AR, carga el CSV en 2D', 350, 90)
-  ctx.fillText('y vuelve a entrar al AR.', 350, 118)
+ ctx.fillStyle = '#94a3b8'
+ ctx.font = '20px Arial'
+ ctx.fillText('Sal del AR, carga el CSV en 2D', 350, 90)
+ ctx.fillText('y vuelve a entrar al AR.', 350, 118)
 
-  ctx.fillStyle = '#c7d2fe'
-  ctx.font = '18px Arial'
-  ctx.fillText('El CSV cargado persiste al entrar en AR.', 350, 165)
+ ctx.fillStyle = '#c7d2fe'
+ ctx.font = '18px Arial'
+ ctx.fillText('El CSV cargado persiste al entrar en AR.', 350, 165)
 
-  // Botón cerrar
-  ctx.fillStyle = '#374151'
-  roundRect(ctx, 200, 210, 300, 60, 12); ctx.fill()
-  ctx.fillStyle = '#fff'
-  ctx.font = 'bold 22px Arial'
-  ctx.fillText('✕ Cerrar', 350, 248)
+ // Botón cerrar
+ ctx.fillStyle = '#374151'
+ roundRect(ctx, 200, 210, 300, 60, 12); ctx.fill()
+ ctx.fillStyle = '#fff'
+ ctx.font = 'bold 22px Arial'
+ ctx.fillText('Cerrar', 350, 248)
 
-  const tex = new THREE.CanvasTexture(c)
-  const geo = new THREE.PlaneGeometry(0.7, 0.3)
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
-  xrCsvPanel = new THREE.Mesh(geo, mat)
-  xrCsvPanel.position.set(0, 0.4, -1.2)
-  scene.add(xrCsvPanel)
+ const tex = new THREE.CanvasTexture(c)
+ const geo = new THREE.PlaneGeometry(0.7, 0.3)
+ const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
+ xrCsvPanel = new THREE.Mesh(geo, mat)
+ xrCsvPanel.position.set(0, 0.4, -1.2)
+ scene.add(xrCsvPanel)
 
-  // Auto-cerrar en 5 segundos
-  setTimeout(() => {
-    if (xrCsvPanel) { scene.remove(xrCsvPanel); xrCsvPanel = null }
-  }, 5000)
+ // Auto-cerrar en 5 segundos
+ setTimeout(() => {
+ if (xrCsvPanel) { scene.remove(xrCsvPanel); xrCsvPanel = null }
+ }, 5000)
 }
 
 // Flash visual de feedback cuando se activa un botón
 function flashXRBtn(id) {
-  const btn = XR_BTNS.find(b => b.id === id)
-  if (!btn) return
-  const orig = btn.color
-  btn.color = '#ffffff'
-  drawXRPanel()
-  setTimeout(() => { btn.color = orig; drawXRPanel() }, 200)
+ const btn = XR_BTNS.find(b =>b.id === id)
+ if (!btn) return
+ const orig = btn.color
+ btn.color = '#ffffff'
+ drawXRPanel()
+ setTimeout(() => { btn.color = orig; drawXRPanel() }, 200)
 }
 
 // ============================================================
@@ -1005,23 +1010,23 @@ function flashXRBtn(id) {
 // ============================================================
 // Estado del drag por controller (índice 0 y 1)
 const xrDrag = [
-  { active: false, prevPos: new THREE.Vector3(), onPanel: false },
-  { active: false, prevPos: new THREE.Vector3(), onPanel: false },
+ { active: false, prevPos: new THREE.Vector3(), onPanel: false },
+ { active: false, prevPos: new THREE.Vector3(), onPanel: false },
 ]
 
 function getControllerRay(ctrl) {
-  const origin    = new THREE.Vector3()
-  const direction = new THREE.Vector3(0, 0, -1)
-  origin.setFromMatrixPosition(ctrl.matrixWorld)
-  direction.applyQuaternion(ctrl.quaternion).normalize()
-  return { origin, direction }
+ const origin = new THREE.Vector3()
+ const direction = new THREE.Vector3(0, 0, -1)
+ origin.setFromMatrixPosition(ctrl.matrixWorld)
+ direction.applyQuaternion(ctrl.quaternion).normalize()
+ return { origin, direction }
 }
 
 function isAimingAtPanel(ctrl) {
-  if (!xrPanel) return false
-  const { origin, direction } = getControllerRay(ctrl)
-  xrRaycaster.set(origin, direction)
-  return xrRaycaster.intersectObject(xrPanel).length > 0
+ if (!xrPanel) return false
+ const { origin, direction } = getControllerRay(ctrl)
+ xrRaycaster.set(origin, direction)
+ return xrRaycaster.intersectObject(xrPanel).length > 0
 }
 
 // Estado del botón A (evitar repetición por frame)
@@ -1029,313 +1034,313 @@ let btnA_wasPressed = false
 
 // Estado de agarre con botón X
 const xrGrab = { active: false, target: null, prevPos: new THREE.Vector3() }
-let xrScale = 0.35   // escala base de la nube en modo XR
+let xrScale = 0.35 // escala base de la nube en modo XR
 
 function setupXRControllers() {
-  for (let i = 0; i < 2; i++) {
-    const ctrl  = renderer.xr.getController(i)
-    const state = xrDrag[i]
+ for (let i = 0; i < 2; i++) {
+ const ctrl = renderer.xr.getController(i)
+ const state = xrDrag[i]
 
-    // ── Rayo visual ──
-    const rayGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, 0, 0),
-      new THREE.Vector3(0, 0, -1)
-    ])
-    const rayMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
-    const ray    = new THREE.Line(rayGeo, rayMat)
-    ray.scale.z  = 3
-    ctrl.add(ray)
+ // ── Rayo visual ──
+ const rayGeo = new THREE.BufferGeometry().setFromPoints([
+ new THREE.Vector3(0, 0, 0),
+ new THREE.Vector3(0, 0, -1)
+ ])
+ const rayMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
+ const ray = new THREE.Line(rayGeo, rayMat)
+ ray.scale.z = 3
+ ctrl.add(ray)
 
-    // ── Puntito de impacto ──
-    const dotGeo = new THREE.SphereGeometry(0.008, 8, 8)
-    const dotMat = new THREE.MeshBasicMaterial({ color: 0xffd700 })
-    const dot    = new THREE.Mesh(dotGeo, dotMat)
-    dot.visible  = false
-    scene.add(dot)
+ // ── Puntito de impacto ──
+ const dotGeo = new THREE.SphereGeometry(0.008, 8, 8)
+ const dotMat = new THREE.MeshBasicMaterial({ color: 0xffd700 })
+ const dot = new THREE.Mesh(dotGeo, dotMat)
+ dot.visible = false
+ scene.add(dot)
 
-    // Trigger → drag / click en panel
-    ctrl.addEventListener('selectstart', () => {
-      state.active  = true
-      state.onPanel = isAimingAtPanel(ctrl)
-      state.prevPos.setFromMatrixPosition(ctrl.matrixWorld)
-    })
-    ctrl.addEventListener('selectend', () => {
-      if (!state.active) return
-      const curPos = new THREE.Vector3().setFromMatrixPosition(ctrl.matrixWorld)
-      const moved  = curPos.distanceTo(state.prevPos) > 0.03
-      if (!moved && state.onPanel) handleXRSelect(ctrl)
-      state.active  = false
-      state.onPanel = false
-      dot.visible   = false
-      rayMat.color.setHex(0xffffff)
-    })
+ // Trigger → drag / click en panel
+ ctrl.addEventListener('selectstart', () => {
+ state.active = true
+ state.onPanel = isAimingAtPanel(ctrl)
+ state.prevPos.setFromMatrixPosition(ctrl.matrixWorld)
+ })
+ ctrl.addEventListener('selectend', () => {
+ if (!state.active) return
+ const curPos = new THREE.Vector3().setFromMatrixPosition(ctrl.matrixWorld)
+ const moved = curPos.distanceTo(state.prevPos) > 0.03
+ if (!moved && state.onPanel) handleXRSelect(ctrl)
+ state.active = false
+ state.onPanel = false
+ dot.visible = false
+ rayMat.color.setHex(0xffffff)
+ })
 
-    scene.add(ctrl)
-    xrControllers.push({ ctrl, dot, rayMat, state })
-  }
+ scene.add(ctrl)
+ xrControllers.push({ ctrl, dot, rayMat, state })
+ }
 }
 
 // Llamar cada frame en el animate loop para actualizar drag y puntito
 function updateXRControllers() {
-  if (!xrSession) return
+ if (!xrSession) return
 
-  xrControllers.forEach(({ ctrl, dot, rayMat, state }, idx) => {
-    const { origin, direction } = getControllerRay(ctrl)
-    xrRaycaster.set(origin, direction)
+ xrControllers.forEach(({ ctrl, dot, rayMat, state }, idx) => {
+ const { origin, direction } = getControllerRay(ctrl)
+ xrRaycaster.set(origin, direction)
 
-    // Comprobar si apunta a un botón real del panel (no solo la superficie)
-    let onButton = false
-    if (xrPanel) {
-      const panelHits = xrRaycaster.intersectObject(xrPanel)
-      if (panelHits.length) {
-        const uv = panelHits[0].uv
-        const px = uv.x * XR_PANEL_W
-        const py = (1 - uv.y) * XR_PANEL_H
-        onButton = XR_BTNS.some(btn => {
-          const x = btn.x * XR_PANEL_W, y = btn.y * XR_PANEL_H
-          const w = btn.w * XR_PANEL_W, h = btn.h * XR_PANEL_H
-          return px >= x && px <= x+w && py >= y && py <= y+h
-        })
-        if (onButton) {
-          dot.position.copy(panelHits[0].point)
-          dot.visible = true
-          rayMat.color.setHex(0xffd700)  // dorado solo sobre botón real
-        }
-      }
-    }
+ // Comprobar si apunta a un botón real del panel (no solo la superficie)
+ let onButton = false
+ if (xrPanel) {
+ const panelHits = xrRaycaster.intersectObject(xrPanel)
+ if (panelHits.length) {
+ const uv = panelHits[0].uv
+ const px = uv.x * XR_PANEL_W
+ const py = (1 - uv.y) * XR_PANEL_H
+ onButton = XR_BTNS.some(btn => {
+ const x = btn.x * XR_PANEL_W, y = btn.y * XR_PANEL_H
+ const w = btn.w * XR_PANEL_W, h = btn.h * XR_PANEL_H
+ return px >= x && px <= x+w && py >= y && py <= y+h
+ })
+ if (onButton) {
+ dot.position.copy(panelHits[0].point)
+ dot.visible = true
+ rayMat.color.setHex(0xffd700) // dorado solo sobre botón real
+ }
+ }
+ }
 
-    // Si no apunta a botón → comprobar esferas para feedback visual
-    if (!onButton) {
-      const sphereHits = xrRaycaster.intersectObjects(pointMeshes)
-      if (sphereHits.length) {
-        dot.position.copy(sphereHits[0].point)
-        dot.visible = true
-        rayMat.color.setHex(0x00ff88)  // verde sobre esfera
-      } else {
-        dot.visible = state.active
-        rayMat.color.setHex(0xffffff)  // blanco por defecto
-      }
-    }
+ // Si no apunta a botón → comprobar esferas para feedback visual
+ if (!onButton) {
+ const sphereHits = xrRaycaster.intersectObjects(pointMeshes)
+ if (sphereHits.length) {
+ dot.position.copy(sphereHits[0].point)
+ dot.visible = true
+ rayMat.color.setHex(0x00ff88) // verde sobre esfera
+ } else {
+ dot.visible = state.active
+ rayMat.color.setHex(0xffffff) // blanco por defecto
+ }
+ }
 
-    // Drag activo → rotar o mover la nube
-    if (state.active && !state.onPanel) {
-      const curPos = new THREE.Vector3().setFromMatrixPosition(ctrl.matrixWorld)
-      const delta  = curPos.clone().sub(state.prevPos)
+ // Drag activo → rotar o mover la nube
+ if (state.active && !state.onPanel) {
+ const curPos = new THREE.Vector3().setFromMatrixPosition(ctrl.matrixWorld)
+ const delta = curPos.clone().sub(state.prevPos)
 
-      if (moveMode) {
-        // Mover la nube en X/Y del mundo
-        cloudPosX += delta.x * 8
-        cloudPosY += delta.y * 8
-      } else {
-        // Rotar con quaternion (sin gimbal lock)
-        // Movimiento horizontal del controller → rotación Y
-        // Movimiento vertical del controller → rotación X
-        _quat.setFromAxisAngle(_axisY, delta.x * 12)
-        pointsGroup.quaternion.premultiply(_quat)
-        _quat.setFromAxisAngle(_axisX, -delta.y * 12)
-        pointsGroup.quaternion.premultiply(_quat)
-      }
+ if (moveMode) {
+ // Mover la nube en X/Y del mundo
+ cloudPosX += delta.x * 8
+ cloudPosY += delta.y * 8
+ } else {
+ // Rotar con quaternion (sin gimbal lock)
+ // Movimiento horizontal del controller → rotación Y
+ // Movimiento vertical del controller → rotación X
+ _quat.setFromAxisAngle(_axisY, delta.x * 12)
+ pointsGroup.quaternion.premultiply(_quat)
+ _quat.setFromAxisAngle(_axisX, -delta.y * 12)
+ pointsGroup.quaternion.premultiply(_quat)
+ }
 
-      state.prevPos.copy(curPos)
-    }
-  })
+ state.prevPos.copy(curPos)
+ }
+ })
 
-  // Dos controllers activos a la vez → escalar (pinch en el espacio)
-  const both = xrControllers.filter(c => c.state.active && !c.state.onPanel)
-  if (both.length === 2) {
-    const p0 = new THREE.Vector3().setFromMatrixPosition(both[0].ctrl.matrixWorld)
-    const p1 = new THREE.Vector3().setFromMatrixPosition(both[1].ctrl.matrixWorld)
-    const dist = p0.distanceTo(p1)
-    if (both[0]._lastDist) {
-      const ratio = dist / both[0]._lastDist
-      cloudScale  = Math.max(MIN_SCALE, Math.min(MAX_SCALE, cloudScale * ratio))
-    }
-    both[0]._lastDist = dist
-  } else {
-    if (xrControllers[0]) xrControllers[0]._lastDist = null
-  }
+ // Dos controllers activos a la vez → escalar (pinch en el espacio)
+ const both = xrControllers.filter(c =>c.state.active && !c.state.onPanel)
+ if (both.length === 2) {
+ const p0 = new THREE.Vector3().setFromMatrixPosition(both[0].ctrl.matrixWorld)
+ const p1 = new THREE.Vector3().setFromMatrixPosition(both[1].ctrl.matrixWorld)
+ const dist = p0.distanceTo(p1)
+ if (both[0]._lastDist) {
+ const ratio = dist / both[0]._lastDist
+ cloudScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, cloudScale * ratio))
+ }
+ both[0]._lastDist = dist
+ } else {
+ if (xrControllers[0]) xrControllers[0]._lastDist = null
+ }
 
-  // ── Leer gamepads de ambos controllers ──
-  const session = renderer.xr.getSession()
-  if (!session) return
-  const sources     = Array.from(session.inputSources)
-  const rightSource = sources.find(s => s.handedness === 'right')
-  const leftSource  = sources.find(s => s.handedness === 'left')
-  const rightCtrl   = xrControllers[1]?.ctrl
-  const leftCtrl    = xrControllers[0]?.ctrl
+ // ── Leer gamepads de ambos controllers ──
+ const session = renderer.xr.getSession()
+ if (!session) return
+ const sources = Array.from(session.inputSources)
+ const rightSource = sources.find(s =>s.handedness === 'right')
+ const leftSource = sources.find(s =>s.handedness === 'left')
+ const rightCtrl = xrControllers[1]?.ctrl
+ const leftCtrl = xrControllers[0]?.ctrl
 
-  // ── Botón A (derecho, buttons[4]) → expresión de esfera apuntada ──
-  if (rightSource?.gamepad?.buttons?.[4]) {
-    const btnA = rightSource.gamepad.buttons[4].pressed
-    if (btnA && !btnA_wasPressed && rightCtrl && pointMeshes.length > 0) {
-      const { origin, direction } = getControllerRay(rightCtrl)
-      xrRaycaster.set(origin, direction)
-      const hits = xrRaycaster.intersectObjects(pointMeshes)
-      if (hits.length > 0 && hits[0].object.userData.expression)
-        showExpressionXR(hits[0].object.userData, hits[0].point)
-    }
-    btnA_wasPressed = btnA
-  }
+ // ── Botón A (derecho, buttons[4]) → expresión de esfera apuntada ──
+ if (rightSource?.gamepad?.buttons?.[4]) {
+ const btnA = rightSource.gamepad.buttons[4].pressed
+ if (btnA && !btnA_wasPressed && rightCtrl && pointMeshes.length > 0) {
+ const { origin, direction } = getControllerRay(rightCtrl)
+ xrRaycaster.set(origin, direction)
+ const hits = xrRaycaster.intersectObjects(pointMeshes)
+ if (hits.length > 0 && hits[0].object.userData.expression)
+ showExpressionXR(hits[0].object.userData, hits[0].point)
+ }
+ btnA_wasPressed = btnA
+ }
 
-  // ── Botón X (izquierdo, buttons[4]) → agarrar y desplazar lo que apunta ──
-  if (leftSource?.gamepad?.buttons?.[4]) {
-    const btnX = leftSource.gamepad.buttons[4].pressed
-    if (btnX) {
-      // ¿Qué está apuntando el controller izquierdo?
-      if (!xrGrab.active) {
-        // Primer frame de X presionado — detectar qué agarrar
-        xrGrab.active  = true
-        xrGrab.prevPos = new THREE.Vector3().setFromMatrixPosition(leftCtrl.matrixWorld)
+ // ── Botón X (izquierdo, buttons[4]) → agarrar y desplazar lo que apunta ──
+ if (leftSource?.gamepad?.buttons?.[4]) {
+ const btnX = leftSource.gamepad.buttons[4].pressed
+ if (btnX) {
+ // ¿Qué está apuntando el controller izquierdo?
+ if (!xrGrab.active) {
+ // Primer frame de X presionado — detectar qué agarrar
+ xrGrab.active = true
+ xrGrab.prevPos = new THREE.Vector3().setFromMatrixPosition(leftCtrl.matrixWorld)
 
-        // Raycast para saber el objetivo
-        const { origin, direction } = getControllerRay(leftCtrl)
-        xrRaycaster.set(origin, direction)
+ // Raycast para saber el objetivo
+ const { origin, direction } = getControllerRay(leftCtrl)
+ xrRaycaster.set(origin, direction)
 
-        if (xrPanel && xrRaycaster.intersectObject(xrPanel).length)
-          xrGrab.target = 'panel'
-        else if (xrConvPanel && xrRaycaster.intersectObject(xrConvPanel).length)
-          xrGrab.target = 'conv'
-        else
-          xrGrab.target = 'cloud'  // por defecto desplaza la nube
-      } else {
-        // Frames siguientes — aplicar desplazamiento
-        const curPos = new THREE.Vector3().setFromMatrixPosition(leftCtrl.matrixWorld)
-        const delta  = curPos.clone().sub(xrGrab.prevPos)
-        const SPEED  = 1.5
+ if (xrPanel && xrRaycaster.intersectObject(xrPanel).length)
+ xrGrab.target = 'panel'
+ else if (xrConvPanel && xrRaycaster.intersectObject(xrConvPanel).length)
+ xrGrab.target = 'conv'
+ else
+ xrGrab.target = 'cloud' // por defecto desplaza la nube
+ } else {
+ // Frames siguientes — aplicar desplazamiento
+ const curPos = new THREE.Vector3().setFromMatrixPosition(leftCtrl.matrixWorld)
+ const delta = curPos.clone().sub(xrGrab.prevPos)
+ const SPEED = 1.5
 
-        if (xrGrab.target === 'panel' && xrPanel) {
-          xrPanel.position.x += delta.x * SPEED
-          xrPanel.position.y += delta.y * SPEED
-          xrPanel.position.z += delta.z * SPEED
-        } else if (xrGrab.target === 'conv' && xrConvPanel) {
-          xrConvPanel.position.x += delta.x * SPEED
-          xrConvPanel.position.y += delta.y * SPEED
-          xrConvPanel.position.z += delta.z * SPEED
-        } else {
-          // Mover nube
-          pointsGroup.position.x += delta.x * SPEED
-          pointsGroup.position.y += delta.y * SPEED
-          pointsGroup.position.z += delta.z * SPEED
-        }
-        xrGrab.prevPos.copy(curPos)
-      }
-    } else {
-      // X soltado
-      xrGrab.active = false
-      xrGrab.target = null
-    }
-  }
+ if (xrGrab.target === 'panel' && xrPanel) {
+ xrPanel.position.x += delta.x * SPEED
+ xrPanel.position.y += delta.y * SPEED
+ xrPanel.position.z += delta.z * SPEED
+ } else if (xrGrab.target === 'conv' && xrConvPanel) {
+ xrConvPanel.position.x += delta.x * SPEED
+ xrConvPanel.position.y += delta.y * SPEED
+ xrConvPanel.position.z += delta.z * SPEED
+ } else {
+ // Mover nube
+ pointsGroup.position.x += delta.x * SPEED
+ pointsGroup.position.y += delta.y * SPEED
+ pointsGroup.position.z += delta.z * SPEED
+ }
+ xrGrab.prevPos.copy(curPos)
+ }
+ } else {
+ // X soltado
+ xrGrab.active = false
+ xrGrab.target = null
+ }
+ }
 
-  // ── Joystick derecho (axes[2]/[3]) → zoom de la nube ──
-  if (rightSource?.gamepad?.axes?.length >= 4) {
-    const jy = rightSource.gamepad.axes[3]  // -1 arriba, +1 abajo
-    if (Math.abs(jy) > 0.15) {
-      xrScale = Math.max(0.05, Math.min(2.0, xrScale - jy * 0.008))
-      pointsGroup.scale.setScalar(xrScale)
-    }
-  }
+ // ── Joystick derecho (axes[2]/[3]) → zoom de la nube ──
+ if (rightSource?.gamepad?.axes?.length >= 4) {
+ const jy = rightSource.gamepad.axes[3] // -1 arriba, +1 abajo
+ if (Math.abs(jy) > 0.15) {
+ xrScale = Math.max(0.05, Math.min(2.0, xrScale - jy * 0.008))
+ pointsGroup.scale.setScalar(xrScale)
+ }
+ }
 
-  // ── Joystick izquierdo (axes[2]/[3]) → rotar nube ──
-  if (leftSource?.gamepad?.axes?.length >= 4) {
-    const jx = leftSource.gamepad.axes[2]  // izq/der
-    const jy = leftSource.gamepad.axes[3]  // arr/abj
-    if (Math.abs(jx) > 0.15 || Math.abs(jy) > 0.15) {
-      _quat.setFromAxisAngle(_axisY,  jx * 0.03)
-      pointsGroup.quaternion.premultiply(_quat)
-      _quat.setFromAxisAngle(_axisX, -jy * 0.03)
-      pointsGroup.quaternion.premultiply(_quat)
-    }
-  }
+ // ── Joystick izquierdo (axes[2]/[3]) → rotar nube ──
+ if (leftSource?.gamepad?.axes?.length >= 4) {
+ const jx = leftSource.gamepad.axes[2] // izq/der
+ const jy = leftSource.gamepad.axes[3] // arr/abj
+ if (Math.abs(jx) > 0.15 || Math.abs(jy) > 0.15) {
+ _quat.setFromAxisAngle(_axisY, jx * 0.03)
+ pointsGroup.quaternion.premultiply(_quat)
+ _quat.setFromAxisAngle(_axisX, -jy * 0.03)
+ pointsGroup.quaternion.premultiply(_quat)
+ }
+ }
 }
 
 async function checkXRSupport() {
-  if (!navigator.xr) {
-    document.getElementById('xrStatus').textContent = 'WebXR no disponible en este browser'
-    return
-  }
-  try {
-    xrSupported = await navigator.xr.isSessionSupported('immersive-ar')
-    if (xrSupported) {
-      document.getElementById('startXRBtn').style.display  = 'block'
-      document.getElementById('enterARBtn').style.display  = 'block'
-      document.getElementById('startBtn').textContent      = '📷 Cámara normal'
-      document.getElementById('xrStatus').textContent      = '🥽 Quest detectado — AR disponible'
-    }
-  } catch (e) {
-    log(`XR check: ${e.message}`)
-  }
+ if (!navigator.xr) {
+ document.getElementById('xrStatus').textContent = 'WebXR no disponible en este browser'
+ return
+ }
+ try {
+ xrSupported = await navigator.xr.isSessionSupported('immersive-ar')
+ if (xrSupported) {
+ document.getElementById('startXRBtn').style.display = 'block'
+ document.getElementById('enterARBtn').style.display = 'block'
+ document.getElementById('startBtn').textContent = 'Cámara normal'
+ document.getElementById('xrStatus').textContent = 'Quest detectado — AR disponible'
+ }
+ } catch (e) {
+ log(`XR check: ${e.message}`)
+ }
 }
 
 async function startXRSession() {
-  if (!xrSupported) return
-  try {
-    xrSession = await navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures: ['local'],
-      optionalFeatures: ['local-floor', 'hand-tracking']
-    })
+ if (!xrSupported) return
+ try {
+ xrSession = await navigator.xr.requestSession('immersive-ar', {
+ requiredFeatures: ['local'],
+ optionalFeatures: ['local-floor', 'hand-tracking']
+ })
 
-    renderer.xr.setReferenceSpaceType('local')
-    await renderer.xr.setSession(xrSession)
+ renderer.xr.setReferenceSpaceType('local')
+ await renderer.xr.setSession(xrSession)
 
-    document.getElementById('cameraVideo').style.display = 'none'
+ document.getElementById('cameraVideo').style.display = 'none'
 
-    // Nube a 1.5m frente al usuario
-    xrScale = 0.35
-    pointsGroup.position.set(-0.3, 0, -1.5)
-    pointsGroup.scale.setScalar(xrScale)
+ // Nube a 1.5m frente al usuario
+ xrScale = 0.35
+ pointsGroup.position.set(-0.3, 0, -1.5)
+ pointsGroup.scale.setScalar(xrScale)
 
-    // Crear panel 3D y controllers
-    createXRPanel()
-    setupXRControllers()
+ // Crear panel 3D y controllers
+ createXRPanel()
+ setupXRControllers()
 
-    // Refrescar panel cada vez que cambia el estado
-    const _origShowAll  = showAllPoints
-    const _origStop     = stopAnimation
+ // Refrescar panel cada vez que cambia el estado
+ const _origShowAll = showAllPoints
+ const _origStop = stopAnimation
 
-    xrSession.addEventListener('end', () => {
-      xrSession = null
-      if (xrPanel)     { scene.remove(xrPanel);     xrPanel = null }
-      if (xrCsvPanel)  { scene.remove(xrCsvPanel);  xrCsvPanel = null }
-      if (xrConvPanel) { scene.remove(xrConvPanel); xrConvPanel = null }
-      if (xrExprPanel) { scene.remove(xrExprPanel); xrExprPanel = null }
-      clearTimeout(xrExprTimeout)
-      xrControllers.forEach(({ ctrl, dot }) => {
-        scene.remove(ctrl)
-        scene.remove(dot)
-      })
-      xrControllers.length = 0
-      pointsGroup.position.set(0, 0, 0)
-      pointsGroup.scale.setScalar(1.0)
-      document.getElementById('cameraVideo').style.display = 'block'
-      // El panel siempre existe — mostrar botón para re-entrar
-      const btn = document.getElementById('enterARBtn')
-      if (btn) { btn.style.display = 'block'; btn.textContent = '🥽 Entrar AR'; btn.disabled = false }
-      log('🥽 Sesión AR terminada')
-    })
+ xrSession.addEventListener('end', () => {
+ xrSession = null
+ if (xrPanel) { scene.remove(xrPanel); xrPanel = null }
+ if (xrCsvPanel) { scene.remove(xrCsvPanel); xrCsvPanel = null }
+ if (xrConvPanel) { scene.remove(xrConvPanel); xrConvPanel = null }
+ if (xrExprPanel) { scene.remove(xrExprPanel); xrExprPanel = null }
+ clearTimeout(xrExprTimeout)
+ xrControllers.forEach(({ ctrl, dot }) => {
+ scene.remove(ctrl)
+ scene.remove(dot)
+ })
+ xrControllers.length = 0
+ pointsGroup.position.set(0, 0, 0)
+ pointsGroup.scale.setScalar(1.0)
+ document.getElementById('cameraVideo').style.display = 'block'
+ // El panel siempre existe — mostrar botón para re-entrar
+ const btn = document.getElementById('enterARBtn')
+ if (btn) { btn.style.display = 'block'; btn.textContent = 'Entrar AR'; btn.disabled = false }
+ log('Sesión AR terminada')
+ })
 
-    log('🥽 Sesión AR iniciada — panel 3D activo')
-  } catch (e) {
-    log(`❌ XR error: ${e.message}`)
-    const s = document.createElement('div')
-    s.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:#f87171;padding:20px 30px;border-radius:12px;font-size:16px;z-index:99999;text-align:center'
-    s.innerHTML = `❌ Error AR:<br><small>${e.message}</small><br><br><button onclick="this.parentNode.remove()" style="padding:8px 16px;background:#3b82f6;color:white;border:none;border-radius:8px;cursor:pointer">Cerrar</button>`
-    document.body.appendChild(s)
-    xrSession = null
-  }
+ log('Sesión AR iniciada — panel 3D activo')
+ } catch (e) {
+ log(` XR error: ${e.message}`)
+ const s = document.createElement('div')
+ s.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:#f87171;padding:20px 30px;border-radius:12px;font-size:16px;z-index:99999;text-align:center'
+ s.innerHTML = `Error AR:<br><small>${e.message}</small><br><br><button onclick="this.parentNode.remove()" style="padding:8px 16px;background:#3b82f6;color:white;border:none;border-radius:8px;cursor:pointer">Cerrar</button>`
+ document.body.appendChild(s)
+ xrSession = null
+ }
 }
 
 // ============================================================
 // COLORES
 // ============================================================
 function generateColors(gens) {
-  const maxGen = Math.max(...gens.filter(g => g > 0), 1)
-  return gens.map(gen => {
-    if (gen === -1) return '#00ff00'
-    if (gen === -2) return '#000080'
-    if (gen === -3) return '#800080'
-    if (gen === -5) return '#ff0000'
-    return `hsl(${55 + (gen / maxGen) * 215}, 100%, 60%)`
-  })
+ const maxGen = Math.max(...gens.filter(g =>g > 0), 1)
+ return gens.map(gen => {
+ if (gen === -1) return '#00ff00'
+ if (gen === -2) return '#000080'
+ if (gen === -3) return '#800080'
+ if (gen === -5) return '#ff0000'
+ return `hsl(${55 + (gen / maxGen) * 215}, 100%, 60%)`
+ })
 }
 
 // Convierte string CSS color → número hex para Three.js
@@ -1343,11 +1348,11 @@ const _colorCanvas = document.createElement('canvas')
 _colorCanvas.width = _colorCanvas.height = 1
 const _colorCtx = _colorCanvas.getContext('2d')
 function cssToHex(css) {
-  _colorCtx.clearRect(0, 0, 1, 1)
-  _colorCtx.fillStyle = css
-  _colorCtx.fillRect(0, 0, 1, 1)
-  const [r, g, b] = _colorCtx.getImageData(0, 0, 1, 1).data
-  return (r << 16) | (g << 8) | b
+ _colorCtx.clearRect(0, 0, 1, 1)
+ _colorCtx.fillStyle = css
+ _colorCtx.fillRect(0, 0, 1, 1)
+ const [r, g, b] = _colorCtx.getImageData(0, 0, 1, 1).data
+ return (r << 16) | (g << 8) | b
 }
 
 // ============================================================
@@ -1357,1009 +1362,1000 @@ function normalize(v, mn, mx) { return mx === mn ? 0.5 : (v - mn) / (mx - mn) }
 
 // ============================================================
 // GEOMETRÍA DE PUNTOS
-// Móvil: esferas de 6 segmentos + MeshLambertMaterial (sin PBR)
-// Desktop: 14 segmentos + MeshStandardMaterial (PBR completo)
+// Calidad uniforme en todas las plataformas (móvil, desktop, lentes XR)
 // ============================================================
-const _sphereGeo = isMobile
-  ? new THREE.SphereGeometry(0.05, 6, 6)    // ~48 triángulos vs ~392 → 8x menos
-  : new THREE.SphereGeometry(0.05, 14, 14)
+const _sphereGeo = new THREE.SphereGeometry(0.05, 14, 14)
 
 function createSphere(data, color) {
-  const SCALE = 2.5
-  const x = (normalize(data.x, minX, maxX) - 0.5) * SCALE
-  const y = (normalize(data.y, minY, maxY) - 0.5) * SCALE
-  const z = (normalize(data.z, minZ, maxZ) - 0.5) * SCALE
+ const SCALE = 2.5
+ const x = (normalize(data.x, minX, maxX) - 0.5) * SCALE
+ const y = (normalize(data.y, minY, maxY) - 0.5) * SCALE
+ const z = (normalize(data.z, minZ, maxZ) - 0.5) * SCALE
 
-  const mat = isMobile
-    ? new THREE.MeshLambertMaterial({         // más rápido: sin specular ni PBR
-        color:       cssToHex(color),
-        opacity:     0.9,
-        transparent: true,
-      })
-    : new THREE.MeshStandardMaterial({        // PBR completo para desktop
-        color:       cssToHex(color),
-        roughness:   0.35,
-        metalness:   0.1,
-        opacity:     0.9,
-        transparent: true,
-      })
+ const mat = new THREE.MeshStandardMaterial({
+ color: cssToHex(color),
+ roughness: 0.35,
+ metalness: 0.1,
+ opacity: 0.9,
+ transparent: true,
+ })
 
-  const mesh = new THREE.Mesh(_sphereGeo, mat)
-  mesh.position.set(x, y, z)
-  mesh.userData = data
+ const mesh = new THREE.Mesh(_sphereGeo, mat)
+ mesh.position.set(x, y, z)
+ mesh.userData = data
 
-  pointBasePosns.push({
-    x, y, z,
-    ox: Math.random() * Math.PI * 2,
-    oy: Math.random() * Math.PI * 2,
-    oz: Math.random() * Math.PI * 2,
-  })
+ pointBasePosns.push({
+ x, y, z,
+ ox: Math.random() * Math.PI * 2,
+ oy: Math.random() * Math.PI * 2,
+ oz: Math.random() * Math.PI * 2,
+ })
 
-  return mesh
+ return mesh
 }
 
 // ============================================================
 // GESTIÓN DE PUNTOS
 // ============================================================
 function clearPoints() {
-  pointMeshes.forEach(m => pointsGroup.remove(m))
-  pointMeshes = []
-  pointBasePosns = []
+ pointMeshes.forEach(m =>pointsGroup.remove(m))
+ pointMeshes = []
+ pointBasePosns = []
 }
 
 function addPoints(filter) {
-  clearPoints()
-  let count = 0
-  parsedData.forEach((data, i) => {
-    if (filter(data)) {
-      const m = createSphere(data, colors[i])
-      pointsGroup.add(m)
-      pointMeshes.push(m)
-      count++
-    }
-  })
-  // pointCount removed
-  return count
+ clearPoints()
+ let count = 0
+ parsedData.forEach((data, i) => {
+ if (filter(data)) {
+ const m = createSphere(data, colors[i])
+ pointsGroup.add(m)
+ pointMeshes.push(m)
+ count++
+ }
+ })
+ // pointCount removed
+ return count
 }
 
 function showAllPoints() {
-  const n = addPoints(() => true)
-  // currentGen removed
-  log(`🎨 ${n} puntos`)
+ const n = addPoints(() =>true)
+ // currentGen removed
+ log(` ${n} puntos`)
 }
 
 function showPointsUpToGeneration(gen) {
-  addPoints(d => d.generation <= gen || d.generation < 0)
-  // currentGen removed
+ addPoints(d =>d.generation <= gen || d.generation < 0)
+ // currentGen removed
 }
 
 function showBestEvolution() {
-  if (!parsedData.length) { log('❌ Carga un CSV primero'); return }
-  stopTour()
-  const n = addPoints(d => d.isBest || d.generation === -5)
-  log(`🏆 Mejor evolución: ${n} puntos`)
+ if (!parsedData.length) { log('Carga un CSV primero'); return }
+ stopTour()
+ const n = addPoints(d =>d.isBest || d.generation === -5)
+ log(` Mejor evolución: ${n} puntos`)
 }
 
 // ============================================================
 // TOUR — línea animada que recorre los puntos IsBest=1
 // ============================================================
 function clearTourLine() {
-  if (tourLine) {
-    pointsGroup.remove(tourLine)
-    tourLine.geometry.dispose()
-    tourLine.material.dispose()
-    tourLine = null
-  }
+ if (tourLine) {
+ pointsGroup.remove(tourLine)
+ tourLine.geometry.dispose()
+ tourLine.material.dispose()
+ tourLine = null
+ }
 }
 
 function stopTour() {
-  tourRunning = false
-  clearInterval(tourInterval)
-  tourInterval = null
-  clearTourLine()
-  const btn = document.getElementById('evolutionBtn')
-  if (btn) {
-    btn.textContent = '🏆 Best Evolution'
-    btn.classList.remove('active')
-    btn.style.background = ''
-  }
+ tourRunning = false
+ clearInterval(tourInterval)
+ tourInterval = null
+ clearTourLine()
+ const btn = document.getElementById('evolutionBtn')
+ if (btn) {
+ btn.textContent = ' Best Evolution'
+ btn.classList.remove('active')
+ btn.style.background = ''
+ }
 }
 
 function startTour() {
-  if (!parsedData.length) { log('❌ Carga un CSV primero'); return }
+ if (!parsedData.length) { log('Carga un CSV primero'); return }
 
-  // Obtener puntos IsBest=1 en orden de aparición en el CSV
-  const bestPoints = parsedData.filter(d => d.isBest)
-  if (bestPoints.length < 2) {
-    log('⚠️ Se necesitan al menos 2 puntos con IsBest=1 para el tour')
-    return
-  }
+ // Obtener puntos IsBest=1 en orden de aparición en el CSV
+ const bestPoints = parsedData.filter(d =>d.isBest)
+ if (bestPoints.length < 2) {
+ log('[Aviso] Se necesitan al menos 2 puntos con IsBest=1 para el tour')
+ return
+ }
 
-  stopTour()
-  tourRunning = true
+ stopTour()
+ tourRunning = true
 
-  // Mostrar los puntos de la mejor evolución como fondo
-  addPoints(d => d.isBest)
+ // Mostrar los puntos de la mejor evolución como fondo
+ addPoints(d =>d.isBest)
 
-  // Construir las posiciones 3D de cada punto best (ya normalizadas)
-  const SCALE = 2.5
-  const positions = bestPoints.map(d => new THREE.Vector3(
-    (normalize(d.x, minX, maxX) - 0.5) * SCALE,
-    (normalize(d.y, minY, maxY) - 0.5) * SCALE,
-    (normalize(d.z, minZ, maxZ) - 0.5) * SCALE
-  ))
+ // Construir las posiciones 3D de cada punto best (ya normalizadas)
+ const SCALE = 2.5
+ const positions = bestPoints.map(d =>new THREE.Vector3(
+ (normalize(d.x, minX, maxX) - 0.5) * SCALE,
+ (normalize(d.y, minY, maxY) - 0.5) * SCALE,
+ (normalize(d.z, minZ, maxZ) - 0.5) * SCALE
+ ))
 
-  // Crear la geometría de la línea con 0 puntos inicialmente
-  const geometry = new THREE.BufferGeometry()
-  // Reservar buffer para todos los segmentos posibles
-  const maxVerts = positions.length * 3
-  const posArray = new Float32Array(maxVerts)
-  geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3))
-  geometry.setDrawRange(0, 0)   // empieza sin dibujar nada
+ // Crear la geometría de la línea con 0 puntos inicialmente
+ const geometry = new THREE.BufferGeometry()
+ // Reservar buffer para todos los segmentos posibles
+ const maxVerts = positions.length * 3
+ const posArray = new Float32Array(maxVerts)
+ geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3))
+ geometry.setDrawRange(0, 0) // empieza sin dibujar nada
 
-  const material = new THREE.LineBasicMaterial({
-    color:       0xffd700,   // dorado
-    linewidth:   2,
-    transparent: true,
-    opacity:     0.9,
-  })
+ const material = new THREE.LineBasicMaterial({
+ color: 0xffd700, // dorado
+ linewidth: 2,
+ transparent: true,
+ opacity: 0.9,
+ })
 
-  tourLine = new THREE.Line(geometry, material)
-  pointsGroup.add(tourLine)
+ tourLine = new THREE.Line(geometry, material)
+ pointsGroup.add(tourLine)
 
-  // Animar: añadir un vértice cada N ms
-  let step = 0
-  const STEP_MS = 120   // velocidad — un punto cada 120ms
+ // Animar: añadir un vértice cada N ms
+ let step = 0
+ const STEP_MS = 120 // velocidad — un punto cada 120ms
 
-  tourInterval = setInterval(() => {
-    if (step >= positions.length) {
-      // Cerrar el tour volviendo al primer punto
-      const attr = tourLine.geometry.attributes.position
-      const p = positions[0]
-      attr.array[step * 3]     = p.x
-      attr.array[step * 3 + 1] = p.y
-      attr.array[step * 3 + 2] = p.z
-      tourLine.geometry.setDrawRange(0, step + 1)
-      attr.needsUpdate = true
-      clearInterval(tourInterval)
-      tourInterval = null
-      log(`✅ Tour completo — ${positions.length} puntos`)
-      return
-    }
+ tourInterval = setInterval(() => {
+ if (step >= positions.length) {
+ // Cerrar el tour volviendo al primer punto
+ const attr = tourLine.geometry.attributes.position
+ const p = positions[0]
+ attr.array[step * 3] = p.x
+ attr.array[step * 3 + 1] = p.y
+ attr.array[step * 3 + 2] = p.z
+ tourLine.geometry.setDrawRange(0, step + 1)
+ attr.needsUpdate = true
+ clearInterval(tourInterval)
+ tourInterval = null
+ log(` Tour completo — ${positions.length} puntos`)
+ return
+ }
 
-    const attr = tourLine.geometry.attributes.position
-    const p = positions[step]
-    attr.array[step * 3]     = p.x
-    attr.array[step * 3 + 1] = p.y
-    attr.array[step * 3 + 2] = p.z
-    tourLine.geometry.setDrawRange(0, step + 1)
-    attr.needsUpdate = true
+ const attr = tourLine.geometry.attributes.position
+ const p = positions[step]
+ attr.array[step * 3] = p.x
+ attr.array[step * 3 + 1] = p.y
+ attr.array[step * 3 + 2] = p.z
+ tourLine.geometry.setDrawRange(0, step + 1)
+ attr.needsUpdate = true
 
-    step++
-  }, STEP_MS)
+ step++
+ }, STEP_MS)
 
-  log(`🛤️ Tour iniciado — ${positions.length} puntos IsBest`)
+ log(` Tour iniciado — ${positions.length} puntos IsBest`)
 }
 
 function showConvergence() {
-  if (!parsedData.length) { log('❌ Carga un CSV primero'); return }
+ if (!parsedData.length) { log('Carga un CSV primero'); return }
 
-  convPts = parsedData
-    .filter(d => d.isBest && d.train !== null && !isNaN(d.train) && d.generation > 0)
-    .sort((a, b) => a.generation - b.generation)
+ convPts = parsedData
+ .filter(d =>d.isBest && d.train !== null && !isNaN(d.train) && d.generation > 0)
+ .sort((a, b) =>a.generation - b.generation)
 
-  if (convPts.length < 2) {
-    log('⚠️ No hay suficientes puntos IsBest con Train para graficar')
-    return
-  }
+ if (convPts.length < 2) {
+ log('[Aviso] No hay suficientes puntos IsBest con Train para graficar')
+ return
+ }
 
-  const panel = document.getElementById('convergencePanel')
-  panel.classList.add('visible')
+ const panel = document.getElementById('convergencePanel')
+ panel.classList.add('visible')
 
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      drawConvergenceChart(convPts)
-      attachConvergenceTooltip()
-      log(`📈 Convergencia: ${convPts.length} puntos graficados`)
-    })
-  })
+ requestAnimationFrame(() => {
+ requestAnimationFrame(() => {
+ drawConvergenceChart(convPts)
+ attachConvergenceTooltip()
+ log(` Convergencia: ${convPts.length} puntos graficados`)
+ })
+ })
 }
 
 function drawConvergenceChart(pts, highlightUpToGen = Infinity) {
-  const canvas = document.getElementById('convCanvas')
-  const panel  = document.getElementById('convergencePanel')
+ const canvas = document.getElementById('convCanvas')
+ const panel = document.getElementById('convergencePanel')
 
-  // Ajustar canvas al tamaño del panel
-  const W = panel.clientWidth
-  const H = panel.clientHeight - document.getElementById('convHeader').offsetHeight
-  canvas.width  = W * window.devicePixelRatio
-  canvas.height = H * window.devicePixelRatio
-  canvas.style.width  = W + 'px'
-  canvas.style.height = H + 'px'
+ // Ajustar canvas al tamaño del panel
+ const W = panel.clientWidth
+ const H = panel.clientHeight - document.getElementById('convHeader').offsetHeight
+ canvas.width = W * window.devicePixelRatio
+ canvas.height = H * window.devicePixelRatio
+ canvas.style.width = W + 'px'
+ canvas.style.height = H + 'px'
 
-  const ctx = canvas.getContext('2d')
-  const dpr = window.devicePixelRatio
-  ctx.scale(dpr, dpr)
+ const ctx = canvas.getContext('2d')
+ const dpr = window.devicePixelRatio
+ ctx.scale(dpr, dpr)
 
-  const PAD = { top: 24, right: 20, bottom: 44, left: 58 }
-  const cW = W - PAD.left - PAD.right
-  const cH = H - PAD.top  - PAD.bottom
+ const PAD = { top: 24, right: 20, bottom: 44, left: 58 }
+ const cW = W - PAD.left - PAD.right
+ const cH = H - PAD.top - PAD.bottom
 
-  // Rangos — siempre basados en TODOS los puntos para ejes estables
-  const genMin  = pts[0].generation
-  const genMax  = pts[pts.length - 1].generation
-  const trainVals = pts.map(d => d.train)
-  const tMin    = Math.min(...trainVals)
-  const tMax    = Math.max(...trainVals)
-  const tPad    = (tMax - tMin) * 0.08 || 0.1
+ // Rangos — siempre basados en TODOS los puntos para ejes estables
+ const genMin = pts[0].generation
+ const genMax = pts[pts.length - 1].generation
+ const trainVals = pts.map(d =>d.train)
+ const tMin = Math.min(...trainVals)
+ const tMax = Math.max(...trainVals)
+ const tPad = (tMax - tMin) * 0.08 || 0.1
 
-  const xOf = gen   => PAD.left + ((gen - genMin) / (genMax - genMin || 1)) * cW
-  const yOf = train => PAD.top  + (1 - (train - (tMin - tPad)) / ((tMax + tPad) - (tMin - tPad))) * cH
+ const xOf = gen =>PAD.left + ((gen - genMin) / (genMax - genMin || 1)) * cW
+ const yOf = train =>PAD.top + (1 - (train - (tMin - tPad)) / ((tMax + tPad) - (tMin - tPad))) * cH
 
-  // Puntos activos hasta highlightUpToGen
-  const activePts = pts.filter(d => d.generation <= highlightUpToGen)
+ // Puntos activos hasta highlightUpToGen
+ const activePts = pts.filter(d =>d.generation <= highlightUpToGen)
 
-  // ── Fondo
-  ctx.clearRect(0, 0, W, H)
+ // ── Fondo
+ ctx.clearRect(0, 0, W, H)
 
-  // Grid lines
-  ctx.strokeStyle = 'rgba(99,102,241,0.12)'
-  ctx.lineWidth   = 1
-  const yTicks = 5
-  for (let i = 0; i <= yTicks; i++) {
-    const y = PAD.top + (i / yTicks) * cH
-    ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
-  }
-  const xTicks = Math.min(8, pts.length - 1)
-  for (let i = 0; i <= xTicks; i++) {
-    const x = PAD.left + (i / xTicks) * cW
-    ctx.beginPath(); ctx.moveTo(x, PAD.top); ctx.lineTo(x, PAD.top + cH); ctx.stroke()
-  }
+ // Grid lines
+ ctx.strokeStyle = 'rgba(99,102,241,0.12)'
+ ctx.lineWidth = 1
+ const yTicks = 5
+ for (let i = 0; i <= yTicks; i++) {
+ const y = PAD.top + (i / yTicks) * cH
+ ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke()
+ }
+ const xTicks = Math.min(8, pts.length - 1)
+ for (let i = 0; i <= xTicks; i++) {
+ const x = PAD.left + (i / xTicks) * cW
+ ctx.beginPath(); ctx.moveTo(x, PAD.top); ctx.lineTo(x, PAD.top + cH); ctx.stroke()
+ }
 
-  // ── Área bajo la curva de puntos activos (gradiente)
-  if (activePts.length >= 2) {
-    const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + cH)
-    grad.addColorStop(0,   'rgba(99,102,241,0.35)')
-    grad.addColorStop(1,   'rgba(99,102,241,0.02)')
-    ctx.beginPath()
-    ctx.moveTo(xOf(activePts[0].generation), PAD.top + cH)
-    activePts.forEach(d => ctx.lineTo(xOf(d.generation), yOf(d.train)))
-    ctx.lineTo(xOf(activePts[activePts.length - 1].generation), PAD.top + cH)
-    ctx.closePath()
-    ctx.fillStyle = grad
-    ctx.fill()
+ // ── Área bajo la curva de puntos activos (gradiente)
+ if (activePts.length >= 2) {
+ const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + cH)
+ grad.addColorStop(0, 'rgba(99,102,241,0.35)')
+ grad.addColorStop(1, 'rgba(99,102,241,0.02)')
+ ctx.beginPath()
+ ctx.moveTo(xOf(activePts[0].generation), PAD.top + cH)
+ activePts.forEach(d =>ctx.lineTo(xOf(d.generation), yOf(d.train)))
+ ctx.lineTo(xOf(activePts[activePts.length - 1].generation), PAD.top + cH)
+ ctx.closePath()
+ ctx.fillStyle = grad
+ ctx.fill()
 
-    // ── Línea de la curva
-    ctx.beginPath()
-    ctx.moveTo(xOf(activePts[0].generation), yOf(activePts[0].train))
-    activePts.forEach(d => ctx.lineTo(xOf(d.generation), yOf(d.train)))
-    ctx.strokeStyle = '#818cf8'
-    ctx.lineWidth   = 2.5
-    ctx.lineJoin    = 'round'
-    ctx.stroke()
-  } else if (activePts.length === 1) {
-    // Un solo punto activo — solo dibujamos el punto
-  }
+ // ── Línea de la curva
+ ctx.beginPath()
+ ctx.moveTo(xOf(activePts[0].generation), yOf(activePts[0].train))
+ activePts.forEach(d =>ctx.lineTo(xOf(d.generation), yOf(d.train)))
+ ctx.strokeStyle = '#818cf8'
+ ctx.lineWidth = 2.5
+ ctx.lineJoin = 'round'
+ ctx.stroke()
+ } else if (activePts.length === 1) {
+ // Un solo punto activo — solo dibujamos el punto
+ }
 
-  // ── Puntos futuros (si highlightUpToGen < Infinity) — atenuados
-  const futurePts = highlightUpToGen < Infinity ? pts.filter(d => d.generation > highlightUpToGen) : []
-  futurePts.forEach(d => {
-    const x = xOf(d.generation), y = yOf(d.train)
-    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(99,102,241,0.18)'; ctx.fill()
-  })
+ // ── Puntos futuros (si highlightUpToGen < Infinity) — atenuados
+ const futurePts = highlightUpToGen < Infinity ? pts.filter(d =>d.generation >highlightUpToGen) : []
+ futurePts.forEach(d => {
+ const x = xOf(d.generation), y = yOf(d.train)
+ ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2)
+ ctx.fillStyle = 'rgba(99,102,241,0.18)'; ctx.fill()
+ })
 
-  // ── Puntos activos — resaltados
-  convRenderedPts = []
-  activePts.forEach((d, i) => {
-    const x = xOf(d.generation), y = yOf(d.train)
-    // Guardar para tooltip
-    convRenderedPts.push({ x, y, gen: d.generation, train: d.train, expr: d.expression || '' })
-    // Halo
-    ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(129,140,248,0.2)'; ctx.fill()
-    // Punto
-    ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2)
-    const isLast = i === activePts.length - 1
-    ctx.fillStyle = isLast ? '#34d399' : '#a5b4fc'
-    ctx.fill()
-  })
+ // ── Puntos activos — resaltados
+ convRenderedPts = []
+ activePts.forEach((d, i) => {
+ const x = xOf(d.generation), y = yOf(d.train)
+ // Guardar para tooltip
+ convRenderedPts.push({ x, y, gen: d.generation, train: d.train, expr: d.expression || '' })
+ // Halo
+ ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2)
+ ctx.fillStyle = 'rgba(129,140,248,0.2)'; ctx.fill()
+ // Punto
+ ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2)
+ const isLast = i === activePts.length - 1
+ ctx.fillStyle = isLast ? '#34d399' : '#a5b4fc'
+ ctx.fill()
+ })
 
-  // Último punto activo resaltado (mejor resultado hasta ahora)
-  if (activePts.length > 0) {
-    const last = activePts[activePts.length - 1]
-    ctx.beginPath(); ctx.arc(xOf(last.generation), yOf(last.train), 6, 0, Math.PI * 2)
-    ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2; ctx.stroke()
-  }
+ // Último punto activo resaltado (mejor resultado hasta ahora)
+ if (activePts.length > 0) {
+ const last = activePts[activePts.length - 1]
+ ctx.beginPath(); ctx.arc(xOf(last.generation), yOf(last.train), 6, 0, Math.PI * 2)
+ ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2; ctx.stroke()
+ }
 
-  // ── Ejes
-  ctx.strokeStyle = 'rgba(148,163,184,0.4)'
-  ctx.lineWidth   = 1
-  ctx.beginPath(); ctx.moveTo(PAD.left, PAD.top); ctx.lineTo(PAD.left, PAD.top + cH + 4); ctx.stroke()
-  ctx.beginPath(); ctx.moveTo(PAD.left - 4, PAD.top + cH); ctx.lineTo(PAD.left + cW, PAD.top + cH); ctx.stroke()
+ // ── Ejes
+ ctx.strokeStyle = 'rgba(148,163,184,0.4)'
+ ctx.lineWidth = 1
+ ctx.beginPath(); ctx.moveTo(PAD.left, PAD.top); ctx.lineTo(PAD.left, PAD.top + cH + 4); ctx.stroke()
+ ctx.beginPath(); ctx.moveTo(PAD.left - 4, PAD.top + cH); ctx.lineTo(PAD.left + cW, PAD.top + cH); ctx.stroke()
 
-  // ── Labels eje Y
-  ctx.fillStyle   = '#94a3b8'
-  ctx.font        = `${11 * Math.min(1, W / 380)}px Mulish, monospace`
-  ctx.textAlign   = 'right'
-  for (let i = 0; i <= yTicks; i++) {
-    const val = tMax + tPad - i * ((tMax + tPad - (tMin - tPad)) / yTicks)
-    const y   = PAD.top + (i / yTicks) * cH
-    ctx.fillText(val.toExponential(2), PAD.left - 6, y + 4)
-  }
+ // ── Labels eje Y
+ ctx.fillStyle = '#94a3b8'
+ ctx.font = `${11 * Math.min(1, W / 380)}px Mulish, monospace`
+ ctx.textAlign = 'right'
+ for (let i = 0; i <= yTicks; i++) {
+ const val = tMax + tPad - i * ((tMax + tPad - (tMin - tPad)) / yTicks)
+ const y = PAD.top + (i / yTicks) * cH
+ ctx.fillText(val.toExponential(2), PAD.left - 6, y + 4)
+ }
 
-  // ── Labels eje X
-  ctx.textAlign = 'center'
-  for (let i = 0; i <= xTicks; i++) {
-    const gen = Math.round(genMin + (i / xTicks) * (genMax - genMin))
-    const x   = PAD.left + (i / xTicks) * cW
-    ctx.fillText(gen, x, PAD.top + cH + 16)
-  }
+ // ── Labels eje X
+ ctx.textAlign = 'center'
+ for (let i = 0; i <= xTicks; i++) {
+ const gen = Math.round(genMin + (i / xTicks) * (genMax - genMin))
+ const x = PAD.left + (i / xTicks) * cW
+ ctx.fillText(gen, x, PAD.top + cH + 16)
+ }
 
-  // ── Títulos de ejes
-  ctx.fillStyle = '#c7d2fe'; ctx.font = `bold ${11}px Mulish, sans-serif`
-  ctx.textAlign = 'center'
-  ctx.fillText('Generación', PAD.left + cW / 2, H - 6)
+ // ── Títulos de ejes
+ ctx.fillStyle = '#c7d2fe'; ctx.font = `bold ${11}px Mulish, sans-serif`
+ ctx.textAlign = 'center'
+ ctx.fillText('Generación', PAD.left + cW / 2, H - 6)
 
-  ctx.save()
-  ctx.translate(13, PAD.top + cH / 2)
-  ctx.rotate(-Math.PI / 2)
-  ctx.fillText('Train (error)', 0, 0)
-  ctx.restore()
+ ctx.save()
+ ctx.translate(13, PAD.top + cH / 2)
+ ctx.rotate(-Math.PI / 2)
+ ctx.fillText('Train (error)', 0, 0)
+ ctx.restore()
 
-  // ── Anotación mejor valor hasta ahora
-  if (activePts.length > 0) {
-    const last = activePts[activePts.length - 1]
-    ctx.fillStyle = '#34d399'; ctx.font = 'bold 10px Mulish, sans-serif'
-    ctx.textAlign = 'left'
-    ctx.fillText(`Best: ${last.train.toExponential(3)} @ gen ${last.generation}`,
-      PAD.left + 4, PAD.top + 14)
-  }
+ // ── Anotación mejor valor hasta ahora
+ if (activePts.length > 0) {
+ const last = activePts[activePts.length - 1]
+ ctx.fillStyle = '#34d399'; ctx.font = 'bold 10px Mulish, sans-serif'
+ ctx.textAlign = 'left'
+ ctx.fillText(`Best: ${last.train.toExponential(3)} @ gen ${last.generation}`,
+ PAD.left + 4, PAD.top + 14)
+ }
 
-  // ── Indicador de animación en curso
-  if (highlightUpToGen < Infinity && activePts.length < pts.length) {
-    const progress = activePts.length / pts.length
-    const barW = cW * progress
-    ctx.fillStyle = 'rgba(129,140,248,0.25)'
-    ctx.fillRect(PAD.left, PAD.top + cH + 24, barW, 4)
-    ctx.strokeStyle = 'rgba(129,140,248,0.5)'; ctx.lineWidth = 1
-    ctx.strokeRect(PAD.left, PAD.top + cH + 24, cW, 4)
-    ctx.fillStyle = '#818cf8'; ctx.font = '9px Mulish, sans-serif'; ctx.textAlign = 'right'
-    ctx.fillText(`${activePts.length}/${pts.length} puntos`, PAD.left + cW, PAD.top + cH + 20)
-  }
+ // ── Indicador de animación en curso
+ if (highlightUpToGen < Infinity && activePts.length < pts.length) {
+ const progress = activePts.length / pts.length
+ const barW = cW * progress
+ ctx.fillStyle = 'rgba(129,140,248,0.25)'
+ ctx.fillRect(PAD.left, PAD.top + cH + 24, barW, 4)
+ ctx.strokeStyle = 'rgba(129,140,248,0.5)'; ctx.lineWidth = 1
+ ctx.strokeRect(PAD.left, PAD.top + cH + 24, cW, 4)
+ ctx.fillStyle = '#818cf8'; ctx.font = '9px Mulish, sans-serif'; ctx.textAlign = 'right'
+ ctx.fillText(`${activePts.length}/${pts.length} puntos`, PAD.left + cW, PAD.top + cH + 20)
+ }
 }
 
 // ============================================================
 // TOOLTIP GRÁFICA DE CONVERGENCIA
 // ============================================================
 function attachConvergenceTooltip() {
-  const canvas  = document.getElementById('convCanvas')
-  const tooltip = document.getElementById('convTooltip')
-  if (!canvas || !tooltip) return
+ const canvas = document.getElementById('convCanvas')
+ const tooltip = document.getElementById('convTooltip')
+ if (!canvas || !tooltip) return
 
-  // Remover listeners anteriores clonando el canvas
-  const newCanvas = canvas.cloneNode(true)
-  canvas.parentNode.replaceChild(newCanvas, canvas)
+ // Remover listeners anteriores clonando el canvas
+ const newCanvas = canvas.cloneNode(true)
+ canvas.parentNode.replaceChild(newCanvas, canvas)
 
-  // Redibujamos en el nuevo canvas
-  if (convPts.length >= 2) drawConvergenceChart(convPts)
+ // Redibujamos en el nuevo canvas
+ if (convPts.length >= 2) drawConvergenceChart(convPts)
 
-  const freshCanvas = document.getElementById('convCanvas')
+ const freshCanvas = document.getElementById('convCanvas')
 
-  freshCanvas.addEventListener('mousemove', e => {
-    if (!convRenderedPts.length) return
-    const rect = freshCanvas.getBoundingClientRect()
-    const mx   = e.clientX - rect.left
-    const my   = e.clientY - rect.top
-    const RADIUS = 14
+ freshCanvas.addEventListener('mousemove', e => {
+ if (!convRenderedPts.length) return
+ const rect = freshCanvas.getBoundingClientRect()
+ const mx = e.clientX - rect.left
+ const my = e.clientY - rect.top
+ const RADIUS = 14
 
-    let found = null, minDist = Infinity
-    convRenderedPts.forEach(p => {
-      const d = Math.hypot(p.x - mx, p.y - my)
-      if (d < RADIUS && d < minDist) { minDist = d; found = p }
-    })
+ let found = null, minDist = Infinity
+ convRenderedPts.forEach(p => {
+ const d = Math.hypot(p.x - mx, p.y - my)
+ if (d < RADIUS && d < minDist) { minDist = d; found = p }
+ })
 
-    if (found) {
-      freshCanvas.style.cursor = 'crosshair'
-      const exprShort = found.expr
-        ? (found.expr.length > 60 ? found.expr.slice(0, 58) + '…' : found.expr)
-        : ''
-      tooltip.innerHTML =
-        `<div style="color:#818cf8;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;margin-bottom:4px;">📍 Punto de convergencia</div>` +
-        `<div style="display:flex;gap:12px;margin-bottom:${exprShort ? 5 : 0}px;">` +
-          `<span>📊 Gen: <strong style="color:#c7d2fe">${found.gen}</strong></span>` +
-          `<span>🎯 Fitness: <strong style="color:#34d399">${found.train.toExponential(4)}</strong></span>` +
-        `</div>` +
-        (exprShort ? `<div style="font-family:'Courier New',monospace;font-size:11px;color:#a5b4fc;word-break:break-all;">${exprShort}</div>` : '')
+ if (found) {
+ freshCanvas.style.cursor = 'crosshair'
+ const exprShort = found.expr
+ ? (found.expr.length > 60 ? found.expr.slice(0, 58) + '…' : found.expr)
+ : ''
+ tooltip.innerHTML =
+ `<div style="color:#818cf8;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;margin-bottom:4px;">Punto de convergencia</div>` +
+ `<div style="display:flex;gap:12px;margin-bottom:${exprShort ? 5 : 0}px;">` +
+ `<span>Gen: <strong style="color:#c7d2fe">${found.gen}</strong></span>` +
+ `<span>Fitness: <strong style="color:#34d399">${found.train.toExponential(4)}</strong></span>` +
+ `</div>` +
+ (exprShort ? `<div style="font-family:'Courier New',monospace;font-size:11px;color:#a5b4fc;word-break:break-all;">${exprShort}</div>` : '')
 
-      // Posición del tooltip — evitar que se salga de la pantalla
-      const tW = 280, tH = 80
-      let tx = e.clientX + 14
-      let ty = e.clientY - 10
-      if (tx + tW > window.innerWidth)  tx = e.clientX - tW - 14
-      if (ty + tH > window.innerHeight) ty = e.clientY - tH - 10
-      tooltip.style.left    = `${tx}px`
-      tooltip.style.top     = `${ty}px`
-      tooltip.style.display = 'block'
-    } else {
-      freshCanvas.style.cursor = 'default'
-      tooltip.style.display = 'none'
-    }
-  })
+ // Posición del tooltip — evitar que se salga de la pantalla
+ const tW = 280, tH = 80
+ let tx = e.clientX + 14
+ let ty = e.clientY - 10
+ if (tx + tW >window.innerWidth) tx = e.clientX - tW - 14
+ if (ty + tH >window.innerHeight) ty = e.clientY - tH - 10
+ tooltip.style.left = `${tx}px`
+ tooltip.style.top = `${ty}px`
+ tooltip.style.display = 'block'
+ } else {
+ freshCanvas.style.cursor = 'default'
+ tooltip.style.display = 'none'
+ }
+ })
 
-  freshCanvas.addEventListener('mouseleave', () => {
-    tooltip.style.display = 'none'
-    freshCanvas.style.cursor = 'default'
-  })
+ freshCanvas.addEventListener('mouseleave', () => {
+ tooltip.style.display = 'none'
+ freshCanvas.style.cursor = 'default'
+ })
 
-  // Touch: tap sobre un punto
-  freshCanvas.addEventListener('touchend', e => {
-    if (!convRenderedPts.length) return
-    const rect = freshCanvas.getBoundingClientRect()
-    const tx   = e.changedTouches[0].clientX - rect.left
-    const ty   = e.changedTouches[0].clientY - rect.top
-    const RADIUS = 20
+ // Touch: tap sobre un punto
+ freshCanvas.addEventListener('touchend', e => {
+ if (!convRenderedPts.length) return
+ const rect = freshCanvas.getBoundingClientRect()
+ const tx = e.changedTouches[0].clientX - rect.left
+ const ty = e.changedTouches[0].clientY - rect.top
+ const RADIUS = 20
 
-    let found = null, minDist = Infinity
-    convRenderedPts.forEach(p => {
-      const d = Math.hypot(p.x - tx, p.y - ty)
-      if (d < RADIUS && d < minDist) { minDist = d; found = p }
-    })
+ let found = null, minDist = Infinity
+ convRenderedPts.forEach(p => {
+ const d = Math.hypot(p.x - tx, p.y - ty)
+ if (d < RADIUS && d < minDist) { minDist = d; found = p }
+ })
 
-    if (found) {
-      tooltip.innerHTML =
-        `<div style="color:#818cf8;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;margin-bottom:4px;">📍 Punto de convergencia</div>` +
-        `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:${found.expr ? 5 : 0}px;">` +
-          `<span>📊 Gen: <strong style="color:#c7d2fe">${found.gen}</strong></span>` +
-          `<span>🎯 Fitness: <strong style="color:#34d399">${found.train.toExponential(4)}</strong></span>` +
-        `</div>` +
-        (found.expr ? `<div style="font-family:'Courier New',monospace;font-size:10px;color:#a5b4fc;word-break:break-all;">${found.expr.length > 55 ? found.expr.slice(0,53)+'…' : found.expr}</div>` : '')
+ if (found) {
+ tooltip.innerHTML =
+ `<div style="color:#818cf8;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;margin-bottom:4px;">Punto de convergencia</div>` +
+ `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:${found.expr ? 5 : 0}px;">` +
+ `<span>Gen: <strong style="color:#c7d2fe">${found.gen}</strong></span>` +
+ `<span>Fitness: <strong style="color:#34d399">${found.train.toExponential(4)}</strong></span>` +
+ `</div>` +
+ (found.expr ? `<div style="font-family:'Courier New',monospace;font-size:10px;color:#a5b4fc;word-break:break-all;">${found.expr.length > 55 ? found.expr.slice(0,53)+'…' : found.expr}</div>` : '')
 
-      tooltip.style.left    = `${e.changedTouches[0].clientX - 10}px`
-      tooltip.style.top     = `${e.changedTouches[0].clientY - 90}px`
-      tooltip.style.display = 'block'
-      clearTimeout(tooltip._t)
-      tooltip._t = setTimeout(() => { tooltip.style.display = 'none' }, 3500)
-      e.stopPropagation()
-    }
-  }, { passive: true })
+ tooltip.style.left = `${e.changedTouches[0].clientX - 10}px`
+ tooltip.style.top = `${e.changedTouches[0].clientY - 90}px`
+ tooltip.style.display = 'block'
+ clearTimeout(tooltip._t)
+ tooltip._t = setTimeout(() => { tooltip.style.display = 'none' }, 3500)
+ e.stopPropagation()
+ }
+ }, { passive: true })
 }
 
 // ============================================================
 // ANIMACIÓN
 // ============================================================
-let animSpeed = 400  // ms por generación — sincronizado con #speedSelect
+let animSpeed = 400 // ms por generación — sincronizado con #speedSelect
 
 function startAnimation() {
-  if (isPlaying) return
-  isPlaying = true
-  currentGeneration = 1
-  const speed = parseInt(document.getElementById('speedSelect')?.value || 400)
-  animSpeed = speed
-  animationInterval = setInterval(() => {
-    showPointsUpToGeneration(currentGeneration)
-    document.getElementById('generationSlider').value = currentGeneration
-    document.getElementById('generationValue').value  = currentGeneration
-    // Sincronizar gráfica de convergencia si está abierta
-    const panel = document.getElementById('convergencePanel')
-    if (panel.classList.contains('visible') && convPts.length >= 2) {
-      drawConvergenceChart(convPts, currentGeneration)
-    }
-    currentGeneration++
-    if (currentGeneration > maxGeneration) stopAnimation()
-  }, animSpeed)
-  log('▶ Animación iniciada')
+ if (isPlaying) return
+ isPlaying = true
+ currentGeneration = 1
+ const speed = parseInt(document.getElementById('speedSelect')?.value || 400)
+ animSpeed = speed
+ animationInterval = setInterval(() => {
+ showPointsUpToGeneration(currentGeneration)
+ document.getElementById('generationSlider').value = currentGeneration
+ document.getElementById('generationValue').value = currentGeneration
+ // Sincronizar gráfica de convergencia si está abierta
+ const panel = document.getElementById('convergencePanel')
+ if (panel.classList.contains('visible') && convPts.length >= 2) {
+ drawConvergenceChart(convPts, currentGeneration)
+ }
+ currentGeneration++
+ if (currentGeneration >maxGeneration) stopAnimation()
+ }, animSpeed)
+ log('Animación iniciada')
 }
 
 function stopAnimation() {
-  isPlaying = false
-  clearInterval(animationInterval)
-  animationInterval = null
-  document.getElementById('playBtn').textContent = '▶ Play'
-  log('⏸ Detenida')
+ isPlaying = false
+ clearInterval(animationInterval)
+ animationInterval = null
+ document.getElementById('playBtn').textContent = 'Play'
+ log('Animación detenida')
 }
 
 // ============================================================
 // CSV
 // ============================================================
 function procesarCSV(texto) {
-  log('📄 Procesando CSV...')
-  const lines   = texto.trim().split('\n')
-  const headers = lines[0].split(',').map(h => h.trim())
-  csvData = lines.slice(1)
-    .map(line => {
-      const vals = line.split(',')
-      const obj  = {}
-      headers.forEach((h, i) => obj[h] = (vals[i] || '').trim())
-      return obj
-    })
-    .filter(r => Object.values(r).some(v => v !== ''))
-  prepararDatos()
+ log('Procesando CSV...')
+ const lines = texto.trim().split('\n')
+ const headers = lines[0].split(',').map(h =>h.trim())
+ csvData = lines.slice(1)
+ .map(line => {
+ const vals = line.split(',')
+ const obj = {}
+ headers.forEach((h, i) =>obj[h] = (vals[i] || '').trim())
+ return obj
+ })
+ .filter(r =>Object.values(r).some(v =>v !== ''))
+ prepararDatos()
 }
 
 function prepararDatos() {
-  if (!csvData?.length) { log('❌ Sin datos CSV'); return }
+ if (!csvData?.length) { log('Sin datos CSV'); return }
 
-  parsedData = csvData.map(row => ({
-    x:          parseFloat(row['Componente 1']),
-    y:          parseFloat(row['Componente 2']),
-    z:          parseFloat(row['Etiqueta']),
-    generation: parseInt(row['Etiqueta']),
-    expression: row['Expresión simbólica'] || 'Sin expresión',
-    train:      row.Train ? parseFloat(row.Train) : null,
-    isBest:     row.IsBest === '1',
-  })).filter(d => !isNaN(d.x) && !isNaN(d.y) && !isNaN(d.z))
+ parsedData = csvData.map(row => ({
+ x: parseFloat(row['Componente 1']),
+ y: parseFloat(row['Componente 2']),
+ z: parseFloat(row['Etiqueta']),
+ generation: parseInt(row['Etiqueta']),
+ expression: row['Expresión simbólica'] || 'Sin expresión',
+ train: row.Train ? parseFloat(row.Train) : null,
+ isBest: row.IsBest === '1',
+ })).filter(d => !isNaN(d.x) && !isNaN(d.y) && !isNaN(d.z))
 
-  generations   = parsedData.map(d => d.generation)
-  colors        = generateColors(generations)
-  maxGeneration = Math.max(...generations.filter(g => g > 0), 1)
-  currentGeneration = 1
+ generations = parsedData.map(d =>d.generation)
+ colors = generateColors(generations)
+ maxGeneration = Math.max(...generations.filter(g =>g > 0), 1)
+ currentGeneration = 1
 
-  const slider = document.getElementById('generationSlider')
-  slider.max = maxGeneration; slider.value = 1
-  document.getElementById('generationValue').value = 1
+ const slider = document.getElementById('generationSlider')
+ slider.max = maxGeneration; slider.value = 1
+ document.getElementById('generationValue').value = 1
 
-  calculateBounds()
-  enableControls()
-  showAllPoints()
+ calculateBounds()
+ enableControls()
+ showAllPoints()
 
-  // loadedStatus removed
-  log(`✅ ${parsedData.length} puntos cargados (gen 1–${maxGeneration})`)
+ // loadedStatus removed
+ log(` ${parsedData.length} puntos cargados (gen 1–${maxGeneration})`)
 }
 
 function calculateBounds() {
-  minX = minY = minZ =  Infinity
-  maxX = maxY = maxZ = -Infinity
-  parsedData.forEach(p => {
-    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x)
-    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y)
-    minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z)
-  })
+ minX = minY = minZ = Infinity
+ maxX = maxY = maxZ = -Infinity
+ parsedData.forEach(p => {
+ minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x)
+ minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y)
+ minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z)
+ })
 }
 
 function enableControls() {
-  ['playBtn','showAllBtn','evolutionBtn','convergenceBtn','generationSlider'].forEach(id => {
-    const el = document.getElementById(id)
-    if (el) el.disabled = false
-  })
+ ['playBtn','showAllBtn','evolutionBtn','convergenceBtn','generationSlider'].forEach(id => {
+ const el = document.getElementById(id)
+ if (el) el.disabled = false
+ })
 }
 
 // ============================================================
 // GESTOS — rotación libre en 3 ejes con quaternions
 // ============================================================
 function rotateCloud(dx, dy) {
-  if (!pointsGroup) return
-  const speed = 0.007
-  // Rotar en Y (horizontal) y X (vertical) sobre ejes del mundo
-  _quat.setFromAxisAngle(_axisY, dx * speed)
-  pointsGroup.quaternion.premultiply(_quat)
-  _quat.setFromAxisAngle(_axisX, dy * speed)
-  pointsGroup.quaternion.premultiply(_quat)
+ if (!pointsGroup) return
+ const speed = 0.007
+ // Rotar en Y (horizontal) y X (vertical) sobre ejes del mundo
+ _quat.setFromAxisAngle(_axisY, dx * speed)
+ pointsGroup.quaternion.premultiply(_quat)
+ _quat.setFromAxisAngle(_axisX, dy * speed)
+ pointsGroup.quaternion.premultiply(_quat)
 }
 
 // Helper: ¿el punto (x,y) está sobre un elemento UI (no la capa 3D)?
 function isOverUI(x, y) {
-  const el = document.elementFromPoint(x, y)
-  if (!el) return false
-  return el.closest('#controlPanel, #convergencePanel, #startScreen, #expressionBox') !== null
+ const el = document.elementFromPoint(x, y)
+ if (!el) return false
+ return el.closest('#controlPanel, #convergencePanel, #startScreen, #expressionBox') !== null
 }
 
 function initGestures() {
-  const layer = document.getElementById('gestureLayer')
+ const layer = document.getElementById('gestureLayer')
 
-  // ── Touch ──
-  // Track touch movement to distinguish tap from drag
-  let touchMoved = false
-  let touchStartX = 0, touchStartY = 0
+ // ── Touch ──
+ // Track touch movement to distinguish tap from drag
+ let touchMoved = false
+ let touchStartX = 0, touchStartY = 0
 
-  layer.addEventListener('touchstart', e => {
-    if (isOverUI(e.touches[0].clientX, e.touches[0].clientY)) return
-    e.preventDefault()
-    touchStartX = e.touches[0].clientX
-    touchStartY = e.touches[0].clientY
-    touchMoved  = false
-    touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY }
-    touch2 = e.touches.length >= 2
-      ? { x: e.touches[1].clientX, y: e.touches[1].clientY }
-      : null
-    if (touch2) lastDist = Math.hypot(touch2.x - touch1.x, touch2.y - touch1.y)
-  }, { passive: false })
+ layer.addEventListener('touchstart', e => {
+ if (isOverUI(e.touches[0].clientX, e.touches[0].clientY)) return
+ e.preventDefault()
+ touchStartX = e.touches[0].clientX
+ touchStartY = e.touches[0].clientY
+ touchMoved = false
+ touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+ touch2 = e.touches.length >= 2
+ ? { x: e.touches[1].clientX, y: e.touches[1].clientY }
+ : null
+ if (touch2) lastDist = Math.hypot(touch2.x - touch1.x, touch2.y - touch1.y)
+ }, { passive: false })
 
-  layer.addEventListener('touchmove', e => {
-    if (!touch1) return
-    e.preventDefault()
-    const dx0 = e.touches[0].clientX - touchStartX
-    const dy0 = e.touches[0].clientY - touchStartY
-    if (Math.abs(dx0) > 6 || Math.abs(dy0) > 6) touchMoved = true
+ layer.addEventListener('touchmove', e => {
+ if (!touch1) return
+ e.preventDefault()
+ const dx0 = e.touches[0].clientX - touchStartX
+ const dy0 = e.touches[0].clientY - touchStartY
+ if (Math.abs(dx0) > 6 || Math.abs(dy0) > 6) touchMoved = true
 
-    if (e.touches.length === 1 && touch1) {
-      const dx = e.touches[0].clientX - touch1.x
-      const dy = e.touches[0].clientY - touch1.y
-      if (moveMode) {
-        cloudPosX += dx * 0.005
-        cloudPosY -= dy * 0.005
-      } else {
-        rotateCloud(dx, dy)
-      }
-      touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY }
-    }
-    if (e.touches.length >= 2 && touch1 && touch2) {
-      const t1 = e.touches[0], t2 = e.touches[1]
-      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
-      cloudScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, cloudScale + (dist - lastDist) * 0.007))
-      lastDist = dist
-      const cx = (t1.clientX + t2.clientX) / 2
-      const cy = (t1.clientY + t2.clientY) / 2
-      cloudPosX += (cx - (touch1.x + touch2.x) / 2) * 0.005
-      cloudPosY -= (cy - (touch1.y + touch2.y) / 2) * 0.005
-      touch1 = { x: t1.clientX, y: t1.clientY }
-      touch2 = { x: t2.clientX, y: t2.clientY }
-    }
-  }, { passive: false })
+ if (e.touches.length === 1 && touch1) {
+ const dx = e.touches[0].clientX - touch1.x
+ const dy = e.touches[0].clientY - touch1.y
+ if (moveMode) {
+ cloudPosX += dx * 0.005
+ cloudPosY -= dy * 0.005
+ } else {
+ rotateCloud(dx, dy)
+ }
+ touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+ }
+ if (e.touches.length >= 2 && touch1 && touch2) {
+ const t1 = e.touches[0], t2 = e.touches[1]
+ const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
+ cloudScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, cloudScale + (dist - lastDist) * 0.007))
+ lastDist = dist
+ const cx = (t1.clientX + t2.clientX) / 2
+ const cy = (t1.clientY + t2.clientY) / 2
+ cloudPosX += (cx - (touch1.x + touch2.x) / 2) * 0.005
+ cloudPosY -= (cy - (touch1.y + touch2.y) / 2) * 0.005
+ touch1 = { x: t1.clientX, y: t1.clientY }
+ touch2 = { x: t2.clientX, y: t2.clientY }
+ }
+ }, { passive: false })
 
-  layer.addEventListener('touchend', e => {
-    // Tap sin arrastrar → raycast a esferas para mostrar expresión
-    if (!touchMoved && e.changedTouches.length === 1) {
-      const tx = e.changedTouches[0].clientX
-      const ty = e.changedTouches[0].clientY
-      if (!isOverUI(tx, ty)) {
-        const mouse = new THREE.Vector2(
-          (tx / window.innerWidth)  *  2 - 1,
-         -(ty / window.innerHeight) *  2 + 1
-        )
-        const ray = new THREE.Raycaster()
-        ray.setFromCamera(mouse, camera)
-        const hits = ray.intersectObjects(pointMeshes)
-        if (hits.length > 0 && hits[0].object.userData.expression)
-          showExpression(hits[0].object.userData)
-      }
-    }
-    touch1 = e.touches.length > 0 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null
-    touch2 = e.touches.length > 1 ? { x: e.touches[1].clientX, y: e.touches[1].clientY } : null
-  })
+ layer.addEventListener('touchend', e => {
+ // Tap sin arrastrar → raycast a esferas para mostrar expresión
+ if (!touchMoved && e.changedTouches.length === 1) {
+ const tx = e.changedTouches[0].clientX
+ const ty = e.changedTouches[0].clientY
+ if (!isOverUI(tx, ty)) {
+ const mouse = new THREE.Vector2(
+ (tx / window.innerWidth) * 2 - 1,
+ -(ty / window.innerHeight) * 2 + 1
+ )
+ const ray = new THREE.Raycaster()
+ ray.setFromCamera(mouse, camera)
+ const hits = ray.intersectObjects(pointMeshes)
+ if (hits.length > 0 && hits[0].object.userData.expression)
+ showExpression(hits[0].object.userData)
+ }
+ }
+ touch1 = e.touches.length > 0 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null
+ touch2 = e.touches.length > 1 ? { x: e.touches[1].clientX, y: e.touches[1].clientY } : null
+ })
 
-  // ── Mouse (desktop) ──
-  let mouseDown = false, rightBtn = false, lastMX = 0, lastMY = 0, dragDist = 0
+ // ── Mouse (desktop) ──
+ let mouseDown = false, rightBtn = false, lastMX = 0, lastMY = 0, dragDist = 0
 
-  layer.addEventListener('mousedown', e => {
-    if (isOverUI(e.clientX, e.clientY)) return
-    mouseDown = true; rightBtn = e.button === 2
-    lastMX = e.clientX; lastMY = e.clientY; dragDist = 0
-  })
-  layer.addEventListener('contextmenu', e => e.preventDefault())
-  window.addEventListener('mouseup', () => { mouseDown = false })
-  window.addEventListener('mousemove', e => {
-    if (!mouseDown) return
-    const dx = e.clientX - lastMX, dy = e.clientY - lastMY
-    dragDist += Math.abs(dx) + Math.abs(dy)
-    if (rightBtn || moveMode) {
-      // Botón derecho OR modo mover → desplazar
-      cloudPosX += dx * 0.005
-      cloudPosY -= dy * 0.005
-    } else {
-      // Botón izquierdo sin modo mover → rotar libre en 3D
-      rotateCloud(dx, dy)
-    }
-    lastMX = e.clientX; lastMY = e.clientY
-  })
+ layer.addEventListener('mousedown', e => {
+ if (isOverUI(e.clientX, e.clientY)) return
+ mouseDown = true; rightBtn = e.button === 2
+ lastMX = e.clientX; lastMY = e.clientY; dragDist = 0
+ })
+ layer.addEventListener('contextmenu', e =>e.preventDefault())
+ window.addEventListener('mouseup', () => { mouseDown = false })
+ window.addEventListener('mousemove', e => {
+ if (!mouseDown) return
+ const dx = e.clientX - lastMX, dy = e.clientY - lastMY
+ dragDist += Math.abs(dx) + Math.abs(dy)
+ if (rightBtn || moveMode) {
+ // Botón derecho OR modo mover → desplazar
+ cloudPosX += dx * 0.005
+ cloudPosY -= dy * 0.005
+ } else {
+ // Botón izquierdo sin modo mover → rotar libre en 3D
+ rotateCloud(dx, dy)
+ }
+ lastMX = e.clientX; lastMY = e.clientY
+ })
 
-  // Rueda → zoom suave
-  layer.addEventListener('wheel', e => {
-    e.preventDefault()
-    cloudScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, cloudScale - e.deltaY * 0.0015))
-  }, { passive: false })
+ // Rueda → zoom suave
+ layer.addEventListener('wheel', e => {
+ e.preventDefault()
+ cloudScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, cloudScale - e.deltaY * 0.0015))
+ }, { passive: false })
 
-  // Click en esfera → expresión simbólica
-  layer.addEventListener('click', e => {
-    if (dragDist > 5) return
-    if (isOverUI(e.clientX, e.clientY)) return
-    const mouse = new THREE.Vector2(
-      (e.clientX / window.innerWidth)  * 2 - 1,
-     -(e.clientY / window.innerHeight) * 2 + 1
-    )
-    const ray = new THREE.Raycaster()
-    ray.setFromCamera(mouse, camera)
-    const hits = ray.intersectObjects(pointMeshes)
-    if (hits.length > 0 && hits[0].object.userData.expression)
-      showExpression(hits[0].object.userData)
-  })
+ // Click en esfera → expresión simbólica
+ layer.addEventListener('click', e => {
+ if (dragDist > 5) return
+ if (isOverUI(e.clientX, e.clientY)) return
+ const mouse = new THREE.Vector2(
+ (e.clientX / window.innerWidth) * 2 - 1,
+ -(e.clientY / window.innerHeight) * 2 + 1
+ )
+ const ray = new THREE.Raycaster()
+ ray.setFromCamera(mouse, camera)
+ const hits = ray.intersectObjects(pointMeshes)
+ if (hits.length > 0 && hits[0].object.userData.expression)
+ showExpression(hits[0].object.userData)
+ })
 }
 
 function showExpression(userData) {
-  const box   = document.getElementById('expressionBox')
-  const expr  = typeof userData === 'string' ? userData : (userData.expression || 'Sin expresión')
-  const gen   = typeof userData === 'object' ? userData.generation  : null
-  const train = typeof userData === 'object' ? userData.train       : null
-  const best  = typeof userData === 'object' ? userData.isBest      : false
+ const box = document.getElementById('expressionBox')
+ const expr = typeof userData === 'string' ? userData : (userData.expression || 'Sin expresión')
+ const gen = typeof userData === 'object' ? userData.generation : null
+ const train = typeof userData === 'object' ? userData.train : null
+ const best = typeof userData === 'object' ? userData.isBest : false
 
-  let html = `<div style="font-size:11px;color:#818cf8;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:5px;">🔬 Expresión simbólica</div>`
-  html += `<div style="font-family:'Courier New',monospace;font-size:13px;color:#e2e8f0;margin-bottom:8px;word-break:break-word;">${expr}</div>`
+ let html = `<div style="font-size:11px;color:#818cf8;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:5px;">Expresión simbólica</div>`
+ html += `<div style="font-family:'Courier New',monospace;font-size:13px;color:#e2e8f0;margin-bottom:8px;word-break:break-word;">${expr}</div>`
 
-  if (gen !== null && gen > 0) {
-    html += `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;">`
-    html += `<span style="color:#94a3b8">📊 Generación: <strong style="color:#c7d2fe">${gen}</strong></span>`
-    if (train !== null && !isNaN(train)) {
-      const color = best ? '#34d399' : '#fbbf24'
-      html += `<span style="color:#94a3b8">🎯 Fitness: <strong style="color:${color}">${train.toExponential(4)}</strong></span>`
-    }
-    if (best) html += `<span style="color:#34d399;font-weight:700">🏆 IsBest</span>`
-    html += `</div>`
-  }
+ if (gen !== null && gen > 0) {
+ html += `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;">`
+ html += `<span style="color:#94a3b8">Generación: <strong style="color:#c7d2fe">${gen}</strong></span>`
+ if (train !== null && !isNaN(train)) {
+ const color = best ? '#34d399' : '#fbbf24'
+ html += `<span style="color:#94a3b8">Fitness: <strong style="color:${color}">${train.toExponential(4)}</strong></span>`
+ }
+ if (best) html += `<span style="color:#34d399;font-weight:700">IsBest</span>`
+ html += `</div>`
+ }
 
-  box.innerHTML = html
-  box.style.display = 'block'
-  clearTimeout(box._t)
-  box._t = setTimeout(() => box.style.display = 'none', 6000)
+ box.innerHTML = html
+ box.style.display = 'block'
+ clearTimeout(box._t)
+ box._t = setTimeout(() =>box.style.display = 'none', 6000)
 }
 
 // ============================================================
 // PANEL DE CONTROL — DRAG, RESIZE, ZOOM
 // ============================================================
 function initPanelControls() {
-  const panel     = document.getElementById('controlPanel')
-  const header    = document.getElementById('panelHeader')
-  const resizeHdl = document.getElementById('resizeHandle')
-  const zoomLbl   = document.getElementById('zoomLevel')
+ const panel = document.getElementById('controlPanel')
+ const header = document.getElementById('panelHeader')
+ const resizeHdl = document.getElementById('resizeHandle')
+ const zoomLbl = document.getElementById('zoomLevel')
 
-  const startDrag = (cx, cy) => {
-    isDraggingPanel = true
-    const r = panel.getBoundingClientRect()
-    panelOffsetX = (cx - r.left) / currentZoom
-    panelOffsetY = (cy - r.top)  / currentZoom
-    // Convertir de bottom-based a top-based para que el drag funcione
-    panel.style.bottom = 'auto'
-    panel.style.top    = `${r.top}px`
-    panel.style.left   = `${r.left}px`
-    panel.style.transform = `scale(${currentZoom})`
-    panel.style.transformOrigin = 'top left'
-    panel.style.transition = 'none'
-  }
-  const moveDrag = (cx, cy) => {
-    if (!isDraggingPanel) return
-    panel.style.left = `${cx - panelOffsetX * currentZoom}px`
-    panel.style.top  = `${cy - panelOffsetY * currentZoom}px`
-  }
-  const endDrag = () => { if (isDraggingPanel) { isDraggingPanel = false; panel.style.transition = 'all 0.3s ease' } }
+ const startDrag = (cx, cy) => {
+ isDraggingPanel = true
+ const r = panel.getBoundingClientRect()
+ panelOffsetX = (cx - r.left) / currentZoom
+ panelOffsetY = (cy - r.top) / currentZoom
+ // Convertir de bottom-based a top-based para que el drag funcione
+ panel.style.bottom = 'auto'
+ panel.style.top = `${r.top}px`
+ panel.style.left = `${r.left}px`
+ panel.style.transform = `scale(${currentZoom})`
+ panel.style.transformOrigin = 'top left'
+ panel.style.transition = 'none'
+ }
+ const moveDrag = (cx, cy) => {
+ if (!isDraggingPanel) return
+ panel.style.left = `${cx - panelOffsetX * currentZoom}px`
+ panel.style.top = `${cy - panelOffsetY * currentZoom}px`
+ }
+ const endDrag = () => { if (isDraggingPanel) { isDraggingPanel = false; panel.style.transition = 'all 0.3s ease' } }
 
-  header.addEventListener('mousedown', e => { if (!e.target.closest('.panel-icon-btn')) { startDrag(e.clientX, e.clientY); e.preventDefault() }})
-  header.addEventListener('touchstart', e => { if (!e.target.closest('.panel-icon-btn')) { startDrag(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault() }}, { passive: false })
-  document.addEventListener('mousemove',  e => moveDrag(e.clientX, e.clientY))
-  document.addEventListener('touchmove',  e => { if (isDraggingPanel && e.touches.length === 1) moveDrag(e.touches[0].clientX, e.touches[0].clientY) }, { passive: false })
-  document.addEventListener('mouseup',   endDrag)
-  document.addEventListener('touchend',  endDrag)
+ header.addEventListener('mousedown', e => { if (!e.target.closest('.panel-icon-btn')) { startDrag(e.clientX, e.clientY); e.preventDefault() }})
+ header.addEventListener('touchstart', e => { if (!e.target.closest('.panel-icon-btn')) { startDrag(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault() }}, { passive: false })
+ document.addEventListener('mousemove', e =>moveDrag(e.clientX, e.clientY))
+ document.addEventListener('touchmove', e => { if (isDraggingPanel && e.touches.length === 1) moveDrag(e.touches[0].clientX, e.touches[0].clientY) }, { passive: false })
+ document.addEventListener('mouseup', endDrag)
+ document.addEventListener('touchend', endDrag)
 
-  resizeHdl.addEventListener('mousedown', e => {
-    isResizingPanel = true
-    resizeStartX = e.clientX; resizeStartY = e.clientY
-    const r = panel.getBoundingClientRect()
-    panelStartWidth = r.width; panelStartHeight = r.height
-    panel.style.transition = 'none'
-    e.preventDefault(); e.stopPropagation()
-  })
-  document.addEventListener('mousemove', e => {
-    if (!isResizingPanel) return
-    panel.style.width    = `${Math.max(320, panelStartWidth  + e.clientX - resizeStartX)}px`
-    panel.style.minWidth = panel.style.width
-    panel.style.height   = `${Math.max(160, panelStartHeight + e.clientY - resizeStartY)}px`
-  })
-  document.addEventListener('mouseup', () => { if (isResizingPanel) { isResizingPanel = false; panel.style.transition = 'all 0.3s ease' }})
+ resizeHdl.addEventListener('mousedown', e => {
+ isResizingPanel = true
+ resizeStartX = e.clientX; resizeStartY = e.clientY
+ const r = panel.getBoundingClientRect()
+ panelStartWidth = r.width; panelStartHeight = r.height
+ panel.style.transition = 'none'
+ e.preventDefault(); e.stopPropagation()
+ })
+ document.addEventListener('mousemove', e => {
+ if (!isResizingPanel) return
+ panel.style.width = `${Math.max(320, panelStartWidth + e.clientX - resizeStartX)}px`
+ panel.style.minWidth = panel.style.width
+ panel.style.height = `${Math.max(160, panelStartHeight + e.clientY - resizeStartY)}px`
+ })
+ document.addEventListener('mouseup', () => { if (isResizingPanel) { isResizingPanel = false; panel.style.transition = 'all 0.3s ease' }})
 
-  const updatePanelZoom = delta => {
-    currentZoom = Math.max(0.5, Math.min(2.0, currentZoom + delta))
-    // Si ya fue movido (tiene top explícito), usar top-left; si no, centrado en bottom
-    const hasMoved = panel.style.top && panel.style.top !== 'auto'
-    panel.style.transform = hasMoved ? `scale(${currentZoom})` : `translateX(-50%) scale(${currentZoom})`
-    panel.style.transformOrigin = hasMoved ? 'top left' : 'bottom center'
-    zoomLbl.textContent = `${Math.round(currentZoom * 100)}%`
-  }
+ const updatePanelZoom = delta => {
+ currentZoom = Math.max(0.5, Math.min(2.0, currentZoom + delta))
+ // Si ya fue movido (tiene top explícito), usar top-left; si no, centrado en bottom
+ const hasMoved = panel.style.top && panel.style.top !== 'auto'
+ panel.style.transform = hasMoved ? `scale(${currentZoom})` : `translateX(-50%) scale(${currentZoom})`
+ panel.style.transformOrigin = hasMoved ? 'top left' : 'bottom center'
+ zoomLbl.textContent = `${Math.round(currentZoom * 100)}%`
+ }
 
-  document.getElementById('zoomInBtn').addEventListener('click',  () => updatePanelZoom(0.1))
-  document.getElementById('zoomOutBtn').addEventListener('click', () => updatePanelZoom(-0.1))
-  document.getElementById('resetZoomBtn').addEventListener('click', () => {
-    currentZoom = 1.0
-    panel.removeAttribute('style')
-    // Volver al estado inicial: centrado en la parte inferior
-    panel.style.bottom    = '12px'
-    panel.style.top       = 'auto'
-    panel.style.transform = 'translateX(-50%)'
-    zoomLbl.textContent = '100%'
-  })
+ document.getElementById('zoomInBtn').addEventListener('click', () =>updatePanelZoom(0.1))
+ document.getElementById('zoomOutBtn').addEventListener('click', () =>updatePanelZoom(-0.1))
+ document.getElementById('resetZoomBtn').addEventListener('click', () => {
+ currentZoom = 1.0
+ panel.removeAttribute('style')
+ // Volver al estado inicial: centrado en la parte inferior
+ panel.style.bottom = '12px'
+ panel.style.top = 'auto'
+ panel.style.transform = 'translateX(-50%)'
+ zoomLbl.textContent = '100%'
+ })
 
-  document.getElementById('minimizeBtn').addEventListener('click', () => {
-    isMinimized = !isMinimized
-    panel.classList.toggle('panel-minimized')
-    document.getElementById('minimizeBtn').textContent = isMinimized ? '➕' : '➖'
-  })
+ document.getElementById('minimizeBtn').addEventListener('click', () => {
+ isMinimized = !isMinimized
+ panel.classList.toggle('panel-minimized')
+ document.getElementById('minimizeBtn').textContent = isMinimized ? '+' : 'Min'
+ })
 }
 
 // ============================================================
 // BOTONES DE CONTROL
 // ============================================================
 function initControlButtons() {
-  const csvBtn   = document.getElementById('csvBtn')
-  const csvInput = document.getElementById('csvInput')
-  csvBtn.addEventListener('click', () => csvInput.click())
-  csvInput.addEventListener('change', e => {
-    const file = e.target.files[0]
-    if (!file) return
-    log(`📄 ${file.name} (${(file.size/1024).toFixed(1)} KB)`)
-    const reader = new FileReader()
-    reader.onload  = ev => procesarCSV(ev.target.result)
-    reader.onerror = ()  => log('❌ Error leyendo archivo')
-    reader.readAsText(file)
-  })
+ const csvBtn = document.getElementById('csvBtn')
+ const csvInput = document.getElementById('csvInput')
+ csvBtn.addEventListener('click', () =>csvInput.click())
+ csvInput.addEventListener('change', e => {
+ const file = e.target.files[0]
+ if (!file) return
+ log(` ${file.name} (${(file.size/1024).toFixed(1)} KB)`)
+ const reader = new FileReader()
+ reader.onload = ev =>procesarCSV(ev.target.result)
+ reader.onerror = () =>log('Error leyendo archivo')
+ reader.readAsText(file)
+ })
 
-  const playBtn = document.getElementById('playBtn')
-  playBtn.addEventListener('click', () => {
-    if (isPlaying) { stopAnimation() }
-    else           { startAnimation(); playBtn.textContent = '⏸ Pause' }
-  })
+ const playBtn = document.getElementById('playBtn')
+ playBtn.addEventListener('click', () => {
+ if (isPlaying) { stopAnimation() }
+ else { startAnimation(); playBtn.textContent = 'Pausa' }
+ })
 
-  // Cambiar velocidad en caliente — reinicia el intervalo si está corriendo
-  document.getElementById('speedSelect')?.addEventListener('change', e => {
-    animSpeed = parseInt(e.target.value)
-    if (isPlaying) {
-      clearInterval(animationInterval)
-      animationInterval = setInterval(() => {
-        showPointsUpToGeneration(currentGeneration)
-        document.getElementById('generationSlider').value = currentGeneration
-        document.getElementById('generationValue').value  = currentGeneration
-        const panel = document.getElementById('convergencePanel')
-        if (panel.classList.contains('visible') && convPts.length >= 2) {
-          drawConvergenceChart(convPts, currentGeneration)
-        }
-        currentGeneration++
-        if (currentGeneration > maxGeneration) stopAnimation()
-      }, animSpeed)
-    }
-  })
+ // Cambiar velocidad en caliente — reinicia el intervalo si está corriendo
+ document.getElementById('speedSelect')?.addEventListener('change', e => {
+ animSpeed = parseInt(e.target.value)
+ if (isPlaying) {
+ clearInterval(animationInterval)
+ animationInterval = setInterval(() => {
+ showPointsUpToGeneration(currentGeneration)
+ document.getElementById('generationSlider').value = currentGeneration
+ document.getElementById('generationValue').value = currentGeneration
+ const panel = document.getElementById('convergencePanel')
+ if (panel.classList.contains('visible') && convPts.length >= 2) {
+ drawConvergenceChart(convPts, currentGeneration)
+ }
+ currentGeneration++
+ if (currentGeneration >maxGeneration) stopAnimation()
+ }, animSpeed)
+ }
+ })
 
-  document.getElementById('showAllBtn').addEventListener('click', () => {
-    stopAnimation(); stopTour(); showAllPoints()
-  })
-  // Best Evolution + Tour fusionados en un solo botón toggle
-  const evolutionBtn = document.getElementById('evolutionBtn')
-  evolutionBtn.addEventListener('click', () => {
-    stopAnimation()
-    if (tourRunning) {
-      // Segunda pulsación → detener tour y volver al estado normal
-      stopTour()
-    } else {
-      // Primera pulsación → mostrar puntos IsBest y arrancar tour
-      evolutionBtn.textContent = '⏹ Detener Tour'
-      evolutionBtn.classList.add('active')
-      evolutionBtn.style.background = '#ec4899'
-      startTour()
-    }
-  })
-  document.getElementById('convergenceBtn').addEventListener('click', () => {
-    stopAnimation(); stopTour(); showConvergence()
-  })
+ document.getElementById('showAllBtn').addEventListener('click', () => {
+ stopAnimation(); stopTour(); showAllPoints()
+ })
+ // Best Evolution + Tour fusionados en un solo botón toggle
+ const evolutionBtn = document.getElementById('evolutionBtn')
+ evolutionBtn.addEventListener('click', () => {
+ stopAnimation()
+ if (tourRunning) {
+ // Segunda pulsación → detener tour y volver al estado normal
+ stopTour()
+ } else {
+ // Primera pulsación → mostrar puntos IsBest y arrancar tour
+ evolutionBtn.textContent = 'Detener Tour'
+ evolutionBtn.classList.add('active')
+ evolutionBtn.style.background = '#ec4899'
+ startTour()
+ }
+ })
+ document.getElementById('convergenceBtn').addEventListener('click', () => {
+ stopAnimation(); stopTour(); showConvergence()
+ })
 
-  // ── Panel de convergencia: cerrar, drag, resize ──
-  const convPanel  = document.getElementById('convergencePanel')
-  const convHeader = document.getElementById('convHeader')
-  document.getElementById('convClose').addEventListener('click', () => {
-    convPanel.classList.remove('visible')
-  })
+ // ── Panel de convergencia: cerrar, drag, resize ──
+ const convPanel = document.getElementById('convergencePanel')
+ const convHeader = document.getElementById('convHeader')
+ document.getElementById('convClose').addEventListener('click', () => {
+ convPanel.classList.remove('visible')
+ })
 
-  // Drag del panel de convergencia
-  let convDragging = false, convOX = 0, convOY = 0
-  convHeader.addEventListener('mousedown', e => {
-    if (e.target.id === 'convClose') return
-    convDragging = true
-    const r = convPanel.getBoundingClientRect()
-    convOX = e.clientX - r.left; convOY = e.clientY - r.top
-    convPanel.style.transition = 'none'
-    e.preventDefault()
-  })
-  window.addEventListener('mousemove', e => {
-    if (!convDragging) return
-    convPanel.style.right  = 'auto'
-    convPanel.style.bottom = 'auto'
-    convPanel.style.left   = `${e.clientX - convOX}px`
-    convPanel.style.top    = `${e.clientY - convOY}px`
-  })
-  window.addEventListener('mouseup', () => { convDragging = false })
+ // Drag del panel de convergencia
+ let convDragging = false, convOX = 0, convOY = 0
+ convHeader.addEventListener('mousedown', e => {
+ if (e.target.id === 'convClose') return
+ convDragging = true
+ const r = convPanel.getBoundingClientRect()
+ convOX = e.clientX - r.left; convOY = e.clientY - r.top
+ convPanel.style.transition = 'none'
+ e.preventDefault()
+ })
+ window.addEventListener('mousemove', e => {
+ if (!convDragging) return
+ convPanel.style.right = 'auto'
+ convPanel.style.bottom = 'auto'
+ convPanel.style.left = `${e.clientX - convOX}px`
+ convPanel.style.top = `${e.clientY - convOY}px`
+ })
+ window.addEventListener('mouseup', () => { convDragging = false })
 
-  // Touch drag del panel convergencia
-  convHeader.addEventListener('touchstart', e => {
-    if (e.target.id === 'convClose') return
-    convDragging = true
-    const r = convPanel.getBoundingClientRect()
-    convOX = e.touches[0].clientX - r.left
-    convOY = e.touches[0].clientY - r.top
-    e.preventDefault()
-  }, { passive: false })
-  window.addEventListener('touchmove', e => {
-    if (!convDragging) return
-    convPanel.style.right  = 'auto'
-    convPanel.style.bottom = 'auto'
-    convPanel.style.left   = `${e.touches[0].clientX - convOX}px`
-    convPanel.style.top    = `${e.touches[0].clientY - convOY}px`
-  }, { passive: false })
-  window.addEventListener('touchend', () => { convDragging = false })
+ // Touch drag del panel convergencia
+ convHeader.addEventListener('touchstart', e => {
+ if (e.target.id === 'convClose') return
+ convDragging = true
+ const r = convPanel.getBoundingClientRect()
+ convOX = e.touches[0].clientX - r.left
+ convOY = e.touches[0].clientY - r.top
+ e.preventDefault()
+ }, { passive: false })
+ window.addEventListener('touchmove', e => {
+ if (!convDragging) return
+ convPanel.style.right = 'auto'
+ convPanel.style.bottom = 'auto'
+ convPanel.style.left = `${e.touches[0].clientX - convOX}px`
+ convPanel.style.top = `${e.touches[0].clientY - convOY}px`
+ }, { passive: false })
+ window.addEventListener('touchend', () => { convDragging = false })
 
-  // Resize del panel convergencia
-  const convRH = document.getElementById('convResizeHandle')
-  let convResizing = false, convRX = 0, convRY = 0, convRW = 0, convRH2 = 0
-  convRH.addEventListener('mousedown', e => {
-    convResizing = true
-    convRX = e.clientX; convRY = e.clientY
-    const r = convPanel.getBoundingClientRect()
-    convRW = r.width; convRH2 = r.height
-    e.preventDefault(); e.stopPropagation()
-  })
-  window.addEventListener('mousemove', e => {
-    if (!convResizing) return
-    const newW = Math.max(280, convRW + e.clientX - convRX)
-    const newH = Math.max(200, convRH2 + e.clientY - convRY)
-    convPanel.style.width  = `${newW}px`
-    convPanel.style.height = `${newH}px`
-    // Redibujar la gráfica al nuevo tamaño
-    if (convPts.length >= 2) drawConvergenceChart(convPts)
-  })
-  window.addEventListener('mouseup', () => { convResizing = false })
-  document.getElementById('resetViewBtn').addEventListener('click', () => {
-    cloudPosX = cloudPosY = 0
-    cloudScale = 1.0
-    if (pointsGroup) pointsGroup.quaternion.identity()
-    stopTour()
-    log('🎯 Vista reseteada')
-  })
+ // Resize del panel convergencia
+ const convRH = document.getElementById('convResizeHandle')
+ let convResizing = false, convRX = 0, convRY = 0, convRW = 0, convRH2 = 0
+ convRH.addEventListener('mousedown', e => {
+ convResizing = true
+ convRX = e.clientX; convRY = e.clientY
+ const r = convPanel.getBoundingClientRect()
+ convRW = r.width; convRH2 = r.height
+ e.preventDefault(); e.stopPropagation()
+ })
+ window.addEventListener('mousemove', e => {
+ if (!convResizing) return
+ const newW = Math.max(280, convRW + e.clientX - convRX)
+ const newH = Math.max(200, convRH2 + e.clientY - convRY)
+ convPanel.style.width = `${newW}px`
+ convPanel.style.height = `${newH}px`
+ // Redibujar la gráfica al nuevo tamaño
+ if (convPts.length >= 2) drawConvergenceChart(convPts)
+ })
+ window.addEventListener('mouseup', () => { convResizing = false })
+ document.getElementById('resetViewBtn').addEventListener('click', () => {
+ cloudPosX = cloudPosY = 0
+ cloudScale = 1.0
+ if (pointsGroup) pointsGroup.quaternion.identity()
+ stopTour()
+ log(' Vista reseteada')
+ })
 
-  // Toggle modo mover
-  const moveBtn = document.getElementById('moveBtn')
-  moveBtn.addEventListener('click', () => {
-    moveMode = !moveMode
-    moveBtn.classList.toggle('active', moveMode)
-    moveBtn.textContent = moveMode ? '🔒 Rotando' : '✋ Mover'
-    moveBtn.style.background = moveMode ? '#f59e0b' : ''
-    log(moveMode ? '✋ Modo: MOVER — arrastra para desplazar' : '🔄 Modo: ROTAR')
-  })
+ // Toggle modo mover
+ const moveBtn = document.getElementById('moveBtn')
+ moveBtn.addEventListener('click', () => {
+ moveMode = !moveMode
+ moveBtn.classList.toggle('active', moveMode)
+ moveBtn.textContent = moveMode ? 'Rotando' : 'Mover'
+ moveBtn.style.background = moveMode ? '#f59e0b' : ''
+ log(moveMode ? ' Modo: MOVER — arrastra para desplazar' : ' Modo: ROTAR')
+ })
 
-  // Toggle flotación
-  const floatBtn = document.getElementById('floatBtn')
-  floatBtn.addEventListener('click', () => {
-    floatEnabled = !floatEnabled
-    floatBtn.classList.toggle('active', floatEnabled)
-    floatBtn.textContent = floatEnabled ? '⏹ Detener' : '✨ Flotar'
-    floatBtn.style.background = floatEnabled ? '#10b981' : ''
-    // Si se desactiva, restaurar posiciones base
-    if (!floatEnabled) {
-      pointMeshes.forEach((mesh, i) => {
-        const b = pointBasePosns[i]
-        if (b) mesh.position.set(b.x, b.y, b.z)
-      })
-    }
-    log(floatEnabled ? '✨ Flotación activada' : '⏹ Flotación desactivada')
-  })
+ // Toggle flotación
+ const floatBtn = document.getElementById('floatBtn')
+ floatBtn.addEventListener('click', () => {
+ floatEnabled = !floatEnabled
+ floatBtn.classList.toggle('active', floatEnabled)
+ floatBtn.textContent = floatEnabled ? 'Detener' : 'Flotar'
+ floatBtn.style.background = floatEnabled ? '#10b981' : ''
+ // Si se desactiva, restaurar posiciones base
+ if (!floatEnabled) {
+ pointMeshes.forEach((mesh, i) => {
+ const b = pointBasePosns[i]
+ if (b) mesh.position.set(b.x, b.y, b.z)
+ })
+ }
+ log(floatEnabled ? ' Flotación activada' : ' Flotación desactivada')
+ })
 
-  const slider = document.getElementById('generationSlider')
-  const valBox = document.getElementById('generationValue')
-  slider.addEventListener('input', e => {
-    currentGeneration = parseInt(e.target.value)
-    valBox.value = currentGeneration
-    showPointsUpToGeneration(currentGeneration)
-    // Sincronizar gráfica de convergencia si está abierta
-    const panel = document.getElementById('convergencePanel')
-    if (panel.classList.contains('visible') && convPts.length >= 2) {
-      drawConvergenceChart(convPts, currentGeneration)
-    }
-  })
+ const slider = document.getElementById('generationSlider')
+ const valBox = document.getElementById('generationValue')
+ slider.addEventListener('input', e => {
+ currentGeneration = parseInt(e.target.value)
+ valBox.value = currentGeneration
+ showPointsUpToGeneration(currentGeneration)
+ // Sincronizar gráfica de convergencia si está abierta
+ const panel = document.getElementById('convergencePanel')
+ if (panel.classList.contains('visible') && convPts.length >= 2) {
+ drawConvergenceChart(convPts, currentGeneration)
+ }
+ })
 
-  // Botón "Entrar AR" dentro del panel — re-entra sin recargar
-  const enterARBtn = document.getElementById('enterARBtn')
-  if (enterARBtn) {
-    enterARBtn.addEventListener('click', async () => {
-      if (!xrSupported) return
-      enterARBtn.textContent  = '⏳ Iniciando...'
-      enterARBtn.disabled     = true
-      await startXRSession()
-      enterARBtn.textContent  = '🥽 Entrar AR'
-      enterARBtn.disabled     = false
-    })
-  }
+ // Botón "Entrar AR" dentro del panel — re-entra sin recargar
+ const enterARBtn = document.getElementById('enterARBtn')
+ if (enterARBtn) {
+ enterARBtn.addEventListener('click', async () => {
+ if (!xrSupported) return
+ enterARBtn.textContent = 'Iniciando...'
+ enterARBtn.disabled = true
+ await startXRSession()
+ enterARBtn.textContent = 'Entrar AR'
+ enterARBtn.disabled = false
+ })
+ }
 }
 
 // ============================================================
@@ -2370,37 +2366,95 @@ function initControlButtons() {
 window.addEventListener('load', checkXRSupport)
 
 document.getElementById('startBtn').addEventListener('click', async () => {
-  document.getElementById('startScreen').style.display = 'none'
-  await startCamera()
-  initThree()
-  initGestures()
-  initPanelControls()
-  initControlButtons()
+ document.getElementById('startScreen').style.display = 'none'
+ await startCamera()
+ initThree()
+ initGestures()
+ initPanelControls()
+ initControlButtons()
 
-  setTimeout(() => {
-    const h = document.getElementById('gestureHint')
-    if (h) { h.style.opacity = '0'; setTimeout(() => h.remove(), 1000) }
-  }, 6000)
+ setTimeout(() => {
+ const h = document.getElementById('gestureHint')
+ if (h) { h.style.opacity = '0'; setTimeout(() =>h.remove(), 1000) }
+ }, 6000)
 
-  log('🚀 Sistema AR iniciado — carga un CSV para comenzar')
+ log('Sistema AR iniciado — carga un CSV para comenzar')
 })
 
 // Botón Quest desde startScreen: inicializa todo y entra en AR
 document.getElementById('startXRBtn').addEventListener('click', async () => {
-  document.getElementById('startScreen').style.display = 'none'
-  // Inicializar cámara normal como fallback (fondo oscuro si falla)
-  await startCamera()
-  initThree()
-  initGestures()
-  initPanelControls()
-  initControlButtons()
-  // Entrar directamente al AR
-  const btn = document.getElementById('enterARBtn')
-  if (btn) { btn.textContent = '⏳ Iniciando...'; btn.disabled = true }
-  await startXRSession()
-  if (btn) { btn.textContent = '🥽 Entrar AR'; btn.disabled = false }
-  log('🥽 Quest AR listo')
+ document.getElementById('startScreen').style.display = 'none'
+ // Inicializar cámara normal como fallback (fondo oscuro si falla)
+ await startCamera()
+ initThree()
+ initGestures()
+ initPanelControls()
+ initControlButtons()
+ // Entrar directamente al AR
+ const btn = document.getElementById('enterARBtn')
+ if (btn) { btn.textContent = 'Iniciando...'; btn.disabled = true }
+ await startXRSession()
+ if (btn) { btn.textContent = 'Entrar AR'; btn.disabled = false }
+ log('Quest AR listo')
 })
 </script>
+
+  <!-- Modal de descarga de archivo requerido -->
+  <div id="csvRequiredModal" style="
+      position:fixed; inset:0;
+      background:rgba(0,0,0,0.78);
+      z-index:999999;
+      display:flex; align-items:center; justify-content:center;
+      font-family:'Mulish',Arial,sans-serif;
+  ">
+    <div style="
+        background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);
+        border:1px solid rgba(99,102,241,0.5);
+        border-radius:20px;
+        padding:36px 40px;
+        max-width:440px; width:90%;
+        text-align:center; color:white;
+        box-shadow:0 24px 60px rgba(0,0,0,0.6);
+    ">
+      <h2 style="font-size:19px;margin:0 0 10px;color:#c7d2fe;font-weight:700;letter-spacing:0.02em;">
+        Archivo requerido
+      </h2>
+      <p style="color:#94a3b8;font-size:14px;margin:0 0 26px;line-height:1.65;">
+        Necesitarás el archivo <strong style="color:#e2e8f0;">output_file.csv</strong>
+        para correrlo dentro del sistema.<br>
+        ¿Deseas descargarlo?
+      </p>
+      <div style="display:flex;gap:12px;justify-content:center;align-items:center;">
+        <!-- Usamos <a> nativo: funciona correctamente en file:// sin bloqueo del navegador -->
+        <a id="csvModalDownload" href="output_file.csv" download="output_file.csv"
+           onclick="setTimeout(()=>document.getElementById('csvRequiredModal').remove(),200)"
+           style="
+            display:inline-block;
+            padding:12px 30px;
+            background:linear-gradient(135deg,#3b82f6,#6366f1);
+            color:white; border:none; border-radius:10px;
+            font-size:15px; font-weight:700; cursor:pointer;
+            box-shadow:0 4px 16px rgba(99,102,241,0.4);
+            text-decoration:none;
+            transition:transform 0.15s,box-shadow 0.15s;
+        ">Descargar</a>
+        <button id="csvModalSkip" style="
+            padding:12px 24px;
+            background:rgba(255,255,255,0.08);
+            color:#94a3b8; border:1px solid rgba(255,255,255,0.15);
+            border-radius:10px; font-size:15px; cursor:pointer;
+            transition:background 0.15s;
+        ">Omitir</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // Modal de descarga — solo el botón Omitir necesita JS
+  document.getElementById('csvModalSkip').addEventListener('click', function() {
+    document.getElementById('csvRequiredModal').remove();
+  });
+  </script>
+
 </body>
 </html>
